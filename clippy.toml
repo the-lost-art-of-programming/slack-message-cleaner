@@ -1,0 +1,16 @@
+too-many-lines-threshold = 30
+# Upstream raised its threshold while macro expansion inflated estimates.
+cognitive-complexity-threshold = 25
+too-many-arguments-threshold = 5
+max-fn-params-bools = 2
+max-struct-bools = 2
+enum-variant-size-threshold = 128
+future-size-threshold = 4096
+type-complexity-threshold = 200
+stack-size-threshold = 16384
+avoid-breaking-exported-api = false
+msrv = "1.96"
+doc-valid-idents = ["..", "IPv4", "IPv6", "WebAssembly", "WASM", "Leptos", "IndexedDB", "Firefox", "Slack", "MiB", "KiB"]
+disallowed-methods = [
+  { path = "std::thread::sleep", reason = "Browser-facing work must not block; use a browser timer abstraction" },
+]

@@ -1,0 +1,36 @@
+name: Extension build and headless Firefox smoke
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  firefox:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # pinned
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust and wasm target
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
+          rustup target add wasm32-unknown-unknown --toolchain 1.96.0
+      - name: Offline structural checks
+        run: python3 scripts/static_check.py
+      - name: Build dependencies and Rust tests
+        run: |
+          cargo install --locked trunk
+          cargo test -p cleaner-core
+          cargo check -p cleaner-ui --target wasm32-unknown-unknown
+      - name: Build Firefox extension with deletion disabled
+        run: python3 scripts/build.py
+      - name: Install Firefox headless test requirements
+        run: |
+          python3 -m pip install selenium --break-system-packages
+          sudo apt-get update
+          sudo apt-get install -y firefox geckodriver
+      - name: Run non-destructive headless Firefox smoke
+        run: python3 scripts/firefox_smoke.py

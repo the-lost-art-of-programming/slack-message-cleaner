@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Own Message Cleaner (Rust Preview)",
+  "version": "0.1.0",
+  "description": "Locally review and carefully delete only your own Slack messages.",
+  "permissions": ["storage", "webRequest"],
+  "host_permissions": ["https://*.slack.com/*", "https://slack.com/*"],
+  "sidebar_action": {
+    "default_title": "Own Message Cleaner",
+    "default_panel": "index.html"
+  },
+  "action": { "default_title": "Open Own Message Cleaner" },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "own-message-cleaner@local.example",
+      "strict_min_version": "128.0"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}

@@ -1,0 +1,13 @@
+MD013:
+  line_length: 80
+  code_block_line_length: 120
+  tables: false
+MD040: true
+MD034: true
+MD024:
+  siblings_only: true
+MD049:
+  style: asterisk
+MD028: false
+MD041: false
+MD033: false

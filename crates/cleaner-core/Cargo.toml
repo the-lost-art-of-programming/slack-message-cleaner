@@ -1,0 +1,13 @@
+[package]
+name = "cleaner-core"
+description = "Pure domain rules for user-owned Slack message review and deletion jobs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+
+[lints]
+workspace = true
