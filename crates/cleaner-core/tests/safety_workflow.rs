@@ -104,7 +104,12 @@ mod tests {
 
     #[test]
     fn saved_queue_restores_paused_and_never_retries_ambiguous_messages() -> Result<(), Box<dyn std::error::Error>> {
-        let CheckpointFixture { mut recovered, account, first_key, second_key } = interrupted_queue_fixture()?;
+        let CheckpointFixture {
+            mut recovered,
+            account,
+            first_key,
+            second_key,
+        } = interrupted_queue_fixture()?;
         assert!(!recovered.is_running(), "restored queues must never auto resume");
         assert_eq!(
             recovered.state(&first_key),
