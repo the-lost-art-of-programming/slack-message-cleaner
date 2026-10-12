@@ -31,20 +31,19 @@ mod tests {
     }
 
     /// Complete account and stable keys used to test interrupted job recovery.
-struct CheckpointFixture {
-    /// The restored, always-paused queue.
-    recovered: DeletionQueue,
-    /// Account used to approve and manually resume the job.
-    account: Account,
-    /// Identity of the interrupted attempt.
-    first_key: MessageKey,
-    /// Identity of the still-queued message.
-    second_key: MessageKey,
-}
+    struct CheckpointFixture {
+        /// The restored, always-paused queue.
+        recovered: DeletionQueue,
+        /// Account used to approve and manually resume the job.
+        account: Account,
+        /// Identity of the interrupted attempt.
+        first_key: MessageKey,
+        /// Identity of the still-queued message.
+        second_key: MessageKey,
+    }
 
-/// Constructs a valid but interrupted job checkpoint for restart-safety tests.
-    fn interrupted_queue_fixture()
-    -> Result<CheckpointFixture, Box<dyn std::error::Error>> {
+    /// Constructs a valid but interrupted job checkpoint for restart-safety tests.
+    fn interrupted_queue_fixture() -> Result<CheckpointFixture, Box<dyn std::error::Error>> {
         let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
         let first = message("D1", "1.000001", "U1")?;
         let second = message("D2", "1.000002", "U1")?;
@@ -60,7 +59,12 @@ struct CheckpointFixture {
         snapshot.insert(first.key().clone(), ItemState::InFlight);
         snapshot.insert(second.key().clone(), ItemState::Queued);
         let recovered = DeletionQueue::restore(batch, snapshot)?;
-        Ok(CheckpointFixture { recovered, account, first_key: first.key().clone(), second_key: second.key().clone() })
+        Ok(CheckpointFixture {
+            recovered,
+            account,
+            first_key: first.key().clone(),
+            second_key: second.key().clone(),
+        })
     }
 
     // ---------------------------------------------------------------------------
@@ -100,7 +104,12 @@ struct CheckpointFixture {
 
     #[test]
     fn saved_queue_restores_paused_and_never_retries_ambiguous_messages() -> Result<(), Box<dyn std::error::Error>> {
-        let CheckpointFixture { mut recovered, account, first_key, second_key } = interrupted_queue_fixture()?;
+        let CheckpointFixture {
+            mut recovered,
+            account,
+            first_key,
+            second_key,
+        } = interrupted_queue_fixture()?;
         assert!(!recovered.is_running(), "restored queues must never auto resume");
         assert_eq!(
             recovered.state(&first_key),
