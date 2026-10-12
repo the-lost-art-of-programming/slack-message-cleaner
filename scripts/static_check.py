@@ -22,7 +22,14 @@ class PackagingChecks(unittest.TestCase):
 
     def test_no_handwritten_javascript_or_typescript(self):
         suffixes = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
-        unexpected = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and p.suffix in suffixes]
+        generated_dirs = {"target", "dist", "pkg", "node_modules", ".git"}
+        unexpected = [
+            str(path.relative_to(ROOT))
+            for path in ROOT.rglob("*")
+            if path.is_file()
+            and path.suffix in suffixes
+            and not generated_dirs.intersection(path.relative_to(ROOT).parts)
+        ]
         self.assertEqual(unexpected, [], "No JS/TS is authored in the source tree")
 
     def test_rust_workspace_and_dependency_manifests_parse(self):
