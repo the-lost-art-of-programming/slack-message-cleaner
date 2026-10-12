@@ -47,7 +47,7 @@ fn storage(area: &str) -> Result<JsValue, String> {
 }
 
 /// Retrieves the Slack token that lasts only for this Firefox browser session.
-pub async fn get_session_token() -> Result<Option<String>, String> {
+pub(crate) async fn get_session_token() -> Result<Option<String>, String> {
     let target = storage("session")?;
     let record = promised(&target, "get", &[JsValue::from_str("slack_session_token")]).await?;
     Ok(property(&record, "slack_session_token")?
@@ -56,7 +56,7 @@ pub async fn get_session_token() -> Result<Option<String>, String> {
 }
 
 /// Writes a token to Firefox's in-memory, session-scoped storage only.
-pub async fn save_session_token(token: &str) -> Result<(), String> {
+pub(crate) async fn save_session_token(token: &str) -> Result<(), String> {
     let record = Object::new();
     Reflect::set(
         &record,
@@ -69,7 +69,7 @@ pub async fn save_session_token(token: &str) -> Result<(), String> {
 }
 
 /// Erases captured credentials without clearing the user's review checkpoints.
-pub async fn clear_session_token() -> Result<(), String> {
+pub(crate) async fn clear_session_token() -> Result<(), String> {
     let _response = promised(
         &storage("session")?,
         "remove",
@@ -80,7 +80,7 @@ pub async fn clear_session_token() -> Result<(), String> {
 }
 
 /// Stores review state as a versioned JSON document; never call with credentials.
-pub async fn save_local<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
+pub(crate) async fn save_local<T: Serialize>(key: &str, value: &T) -> Result<(), String> {
     let serialized = serde_json::to_string(value).map_err(|_| "Cannot serialize review checkpoint".to_owned())?;
     let record = Object::new();
     Reflect::set(&record, &JsValue::from_str(key), &JsValue::from_str(&serialized))
@@ -90,7 +90,7 @@ pub async fn save_local<T: Serialize>(key: &str, value: &T) -> Result<(), String
 }
 
 /// Loads a durable review state, deferring its integrity checks to the domain layer.
-pub async fn get_local<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
+pub(crate) async fn get_local<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
     let record = promised(&storage("local")?, "get", &[JsValue::from_str(key)]).await?;
     property(&record, key)?
         .as_string()
@@ -129,7 +129,7 @@ fn valid_token(token: &str) -> bool {
 ///
 /// The user must refresh an authenticated Slack tab after opening this sidebar.
 /// Tokens never leave Firefox session storage other than requests sent to Slack.
-pub fn register_capture(token: RwSignal<Option<String>>, status: RwSignal<String>) -> Result<(), String> {
+pub(crate) fn register_capture(token: RwSignal<Option<String>>, status: RwSignal<String>) -> Result<(), String> {
     let browser = api()?;
     let web_request = property(&browser, "webRequest")?;
     let event = property(&web_request, "onBeforeRequest")?;

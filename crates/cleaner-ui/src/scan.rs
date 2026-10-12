@@ -13,7 +13,7 @@ use crate::{
 
 /// Separate storage keys by authenticated workspace and user.
 #[must_use]
-pub fn storage_key(workspace: &str, user: &str) -> String {
+pub(crate) fn storage_key(workspace: &str, user: &str) -> String {
     format!("review_{workspace}_{user}")
 }
 
@@ -155,7 +155,7 @@ async fn scan_one(
 ///
 /// # Errors
 /// Reports cancellation, permissions, API errors, or checkpoint failures explicitly.
-pub async fn scan_all(
+pub(crate) async fn scan_all(
     token: &str,
     mut data: WorkspaceData,
     state: RwSignal<WorkspaceData>,

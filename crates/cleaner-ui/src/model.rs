@@ -16,30 +16,30 @@ const SCHEMA_VERSION: u32 = 1;
 
 /// Minimal navigable conversation metadata.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct Conversation {
+pub(crate) struct Conversation {
     /// Stable Slack conversation identifier.
-    pub id: String,
+    pub(crate) id: String,
     /// A human-readable Slack name or safe ID fallback.
-    pub label: String,
+    pub(crate) label: String,
     /// Public channel, private channel, DM, or group DM.
-    pub kind: ConversationKind,
+    pub(crate) kind: ConversationKind,
 }
 
 /// User-owned message, with enough metadata to recheck ownership before deletion.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct OwnedMessage {
+pub(crate) struct OwnedMessage {
     /// Stable Slack channel or DM identifier.
-    pub channel: String,
+    pub(crate) channel: String,
     /// Exact timestamp preserving fractional digits.
-    pub timestamp: String,
+    pub(crate) timestamp: String,
     /// Thread root only when this message is a reply.
-    pub parent: Option<String>,
+    pub(crate) parent: Option<String>,
     /// Conversation classification for local filtering.
-    pub kind: ConversationKind,
+    pub(crate) kind: ConversationKind,
     /// Bounded review-only preview.
-    pub preview: String,
+    pub(crate) preview: String,
     /// Conversation name or ID captured at discovery time.
-    pub conversation_label: String,
+    pub(crate) conversation_label: String,
 }
 
 impl OwnedMessage {
@@ -47,7 +47,7 @@ impl OwnedMessage {
     ///
     /// # Errors
     /// Rejects malformed IDs or timestamps instead of queuing them for deletion.
-    pub fn domain(&self, workspace: &str, author: &str) -> Result<Message, String> {
+    pub(crate) fn domain(&self, workspace: &str, author: &str) -> Result<Message, String> {
         let workspace_id = WorkspaceId::parse(workspace).map_err(|error| error.to_string())?;
         let channel_id = ConversationId::parse(&self.channel).map_err(|error| error.to_string())?;
         let timestamp = MessageTs::parse(&self.timestamp).map_err(|error| error.to_string())?;
@@ -69,52 +69,52 @@ impl OwnedMessage {
 
     /// Stable key for local review selection and status presentation.
     #[must_use]
-    pub fn identifier(&self) -> String {
+    pub(crate) fn identifier(&self) -> String {
         format!("{}:{}", self.channel, self.timestamp)
     }
 }
 
 /// Persisted state of one reviewed item in a confirmed job.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct JobEntry {
+pub(crate) struct JobEntry {
     /// Immutable approved message snapshot.
-    pub message: OwnedMessage,
+    pub(crate) message: OwnedMessage,
     /// Recorded attempt outcome, never marked successful without Slack acknowledgment.
-    pub status: ItemState,
+    pub(crate) status: ItemState,
 }
 
 /// A user-approved, manually resumed, account-bound deletion batch.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct SavedJob {
+pub(crate) struct SavedJob {
     /// Exact number confirmed, redundant for checkpoint integrity.
-    pub confirmed_count: usize,
+    pub(crate) confirmed_count: usize,
     /// Snapshot of individually selected IDs and per-item attempt state.
-    pub entries: Vec<JobEntry>,
+    pub(crate) entries: Vec<JobEntry>,
 }
 
 /// Saved data for one exact Slack workspace and user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct WorkspaceData {
+pub(crate) struct WorkspaceData {
     /// Current JSON data schema version.
-    pub schema: u32,
+    pub(crate) schema: u32,
     /// Authenticated Slack team ID.
-    pub workspace: String,
+    pub(crate) workspace: String,
     /// Authenticated Slack user ID.
-    pub user: String,
+    pub(crate) user: String,
     /// Navigation items retained locally.
-    pub conversations: Vec<Conversation>,
+    pub(crate) conversations: Vec<Conversation>,
     /// Own-message snapshots retained locally for review, not credentials.
-    pub messages: Vec<OwnedMessage>,
+    pub(crate) messages: Vec<OwnedMessage>,
     /// A confirmed deletion queue, if one exists.
-    pub job: Option<SavedJob>,
+    pub(crate) job: Option<SavedJob>,
     /// True only if all conversations and pages were scanned successfully.
-    pub scan_complete: bool,
+    pub(crate) scan_complete: bool,
 }
 
 impl WorkspaceData {
     /// Initializes review data without assuming successful discovery.
     #[must_use]
-    pub fn new(workspace: String, user: String) -> Self {
+    pub(crate) fn new(workspace: String, user: String) -> Self {
         Self {
             schema: SCHEMA_VERSION,
             workspace,
@@ -130,7 +130,7 @@ impl WorkspaceData {
     ///
     /// # Errors
     /// Fails closed on account mismatch, duplicate entries, corrupt counts or IDs.
-    pub fn verified_queue(&self, job: &SavedJob) -> Result<DeletionQueue, String> {
+    pub(crate) fn verified_queue(&self, job: &SavedJob) -> Result<DeletionQueue, String> {
         if self.schema != SCHEMA_VERSION || job.entries.len() != job.confirmed_count {
             return Err("Incompatible or inconsistent deletion checkpoint".to_owned());
         }
@@ -153,7 +153,7 @@ impl WorkspaceData {
     }
 
     /// Appends discovered messages by stable key without inflating counts.
-    pub fn merge_messages(&mut self, incoming: Vec<OwnedMessage>) {
+    pub(crate) fn merge_messages(&mut self, incoming: Vec<OwnedMessage>) {
         let mut existing: BTreeSet<String> = self.messages.iter().map(OwnedMessage::identifier).collect();
         for message in incoming {
             if existing.insert(message.identifier()) {
@@ -164,7 +164,7 @@ impl WorkspaceData {
 }
 
 /// Converts a Slack conversation into the smallest necessary navigation record.
-pub fn parse_conversation(raw: &Value) -> Option<Conversation> {
+pub(crate) fn parse_conversation(raw: &Value) -> Option<Conversation> {
     let id = raw.get("id")?.as_str()?.to_owned();
     ConversationId::parse(&id).ok()?;
     let kind = if raw.get("is_im").and_then(Value::as_bool).unwrap_or(false) {
@@ -188,7 +188,7 @@ pub fn parse_conversation(raw: &Value) -> Option<Conversation> {
 }
 
 /// Parses only supported, explicitly user-authored Slack message types.
-pub fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &str) -> Option<OwnedMessage> {
+pub(crate) fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &str) -> Option<OwnedMessage> {
     if raw.get("user")?.as_str()? != user_id {
         return None;
     }
@@ -225,7 +225,7 @@ pub fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &str) -> O
 
 /// Extracts the next pagination cursor, treating its absence as completion.
 #[must_use]
-pub fn cursor(value: &Value) -> String {
+pub(crate) fn cursor(value: &Value) -> String {
     value
         .pointer("/response_metadata/next_cursor")
         .and_then(Value::as_str)

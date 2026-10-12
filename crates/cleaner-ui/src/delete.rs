@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Verified identity from Slack's live `auth.test` response.
-pub async fn verify_account(token: &str) -> Result<(String, String), String> {
+pub(crate) async fn verify_account(token: &str) -> Result<(String, String), String> {
     let response = Slack::new(token)
         .call("auth.test", &[])
         .await
@@ -39,7 +39,7 @@ pub async fn verify_account(token: &str) -> Result<(String, String), String> {
 ///
 /// # Errors
 /// Refuses empty sets, wrong counts, other-account data, or duplicates.
-pub fn make_job(data: &WorkspaceData, selected: &[OwnedMessage], count: usize) -> Result<SavedJob, String> {
+pub(crate) fn make_job(data: &WorkspaceData, selected: &[OwnedMessage], count: usize) -> Result<SavedJob, String> {
     let account = Account::new(
         WorkspaceId::parse(&data.workspace).map_err(|e| e.to_string())?,
         UserId::parse(&data.user).map_err(|e| e.to_string())?,
@@ -161,7 +161,7 @@ async fn checkpoint(data: &WorkspaceData, state: RwSignal<WorkspaceData>) -> Res
 /// # Errors
 /// Stops on identity changes or failures to persist checkpoints. It never
 /// automatically retries an uncertain deletion result after interruption.
-pub async fn resume_job(
+pub(crate) async fn resume_job(
     token: &str,
     state: RwSignal<WorkspaceData>,
     status: RwSignal<String>,
