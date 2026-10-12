@@ -299,8 +299,10 @@ fn App() -> impl IntoView {
                             >= visible_messages(&data.get(), &category.get(), &conversation.get(), &query.get()).len()>"Next page"</button>
                 </div>
                 <For
-                    each=move || visible_messages(&data.get(), &category.get(), &conversation.get(), &query.get())
-                        .into_iter().skip(page.get().saturating_mul(PAGE_SIZE)).take(PAGE_SIZE).collect::<Vec<_>>()
+                    each=move || {
+                        visible_messages(&data.get(), &category.get(), &conversation.get(), &query.get())
+                            .into_iter().skip(page.get().saturating_mul(PAGE_SIZE)).take(PAGE_SIZE).collect::<Vec<_>>()
+                    }
                     key=|item| item.identifier()
                     children=move |item| {
                         let key = item.identifier();

@@ -132,3 +132,7 @@ worker rather than unbounded concurrent deletions.
   Firefox AMO submissions rather than server containers or crates.io artifacts.
 - No remote automated-review service is required: do not send Slack data or
   source secrets to third-party review services as part of CI.
+
+## Mandatory source organization
+
+Adopt Praxis's 77-dash source section separators, intentional spacing, explanatory safety comments, and fully documented public APIs. Test standalone Rustdoc examples for pure functions. See `docs/CODE_STYLE.md`. Gloo is retained (Rust/WebAssembly ecosystem, unrelated to Solo.io).

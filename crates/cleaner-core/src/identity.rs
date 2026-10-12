@@ -21,10 +21,10 @@ pub enum IdentityError {
 
 impl fmt::Display for IdentityError {
     /// Describes invalid input without including potentially sensitive raw values.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidIdentifier => formatter.write_str("invalid Slack identifier"),
-            Self::InvalidTimestamp => formatter.write_str("invalid Slack message timestamp"),
+            Self::InvalidIdentifier => f.write_str("invalid Slack identifier"),
+            Self::InvalidTimestamp => f.write_str("invalid Slack message timestamp"),
         }
     }
 }
@@ -37,6 +37,9 @@ pub struct WorkspaceId(String);
 
 impl WorkspaceId {
     /// Validates and preserves an opaque Slack workspace identifier.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
         validate_identifier(raw).map(|()| Self(raw.to_owned()))
     }
@@ -54,6 +57,9 @@ pub struct UserId(String);
 
 impl UserId {
     /// Validates a user identifier without assuming a particular ID prefix.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
         validate_identifier(raw).map(|()| Self(raw.to_owned()))
     }
@@ -71,6 +77,9 @@ pub struct ConversationId(String);
 
 impl ConversationId {
     /// Validates a conversation identifier without relying on its prefix.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
         validate_identifier(raw).map(|()| Self(raw.to_owned()))
     }
@@ -88,6 +97,9 @@ pub struct MessageTs(String);
 
 impl MessageTs {
     /// Accepts `seconds.fraction` without floating point conversion or rounding.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
         let (seconds, fraction) = raw.split_once('.').ok_or(IdentityError::InvalidTimestamp)?;
         let seconds_valid = !seconds.is_empty()

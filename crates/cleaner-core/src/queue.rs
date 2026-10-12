@@ -52,12 +52,12 @@ pub enum QueueError {
 
 impl fmt::Display for QueueError {
     /// Describes a rejected job transition without exposing message contents.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Paused => formatter.write_str("deletion queue requires explicit resume"),
-            Self::AccountMismatch => formatter.write_str("current account does not match approved batch"),
-            Self::UnknownMessage => formatter.write_str("message not present in approved batch"),
-            Self::InvalidTransition => formatter.write_str("invalid deletion queue transition"),
+            Self::Paused => f.write_str("deletion queue requires explicit resume"),
+            Self::AccountMismatch => f.write_str("current account does not match approved batch"),
+            Self::UnknownMessage => f.write_str("message not present in approved batch"),
+            Self::InvalidTransition => f.write_str("invalid deletion queue transition"),
         }
     }
 }
@@ -84,6 +84,9 @@ impl DeletionQueue {
     }
 
     /// Rehydrates a saved job, rejects foreign keys, and fails closed after exit.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     ///
     /// No persisted running flag is accepted: a restored job is always paused,
     /// and interrupted attempts become `UnknownOutcome` before user interaction.
@@ -121,6 +124,9 @@ impl DeletionQueue {
 
     /// Arms this queue only for the exact user/workspace that confirmed it.
     ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
+    ///
     /// The caller must also verify a fresh browser session before this call.
     pub fn resume(&mut self, active_account: &Account) -> Result<(), QueueError> {
         if active_account != self.batch.account() {
@@ -137,6 +143,9 @@ impl DeletionQueue {
 
     /// Marks an approved, queued item in flight *before* the destructive request.
     ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
+    ///
     /// Adapters must persist this transition before making a Slack request,
     /// and must revalidate authorship before sending it.
     pub fn start(&mut self, key: &MessageKey) -> Result<(), QueueError> {
@@ -152,6 +161,9 @@ impl DeletionQueue {
     }
 
     /// Finishes only a known in-flight attempt with an explicit result.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn record_outcome(&mut self, key: &MessageKey, outcome: AttemptOutcome) -> Result<(), QueueError> {
         let state = self.statuses.get_mut(key).ok_or(QueueError::UnknownMessage)?;
         if *state != ItemState::InFlight {

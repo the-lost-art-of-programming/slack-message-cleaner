@@ -22,12 +22,12 @@ pub enum SelectionError {
 
 impl fmt::Display for SelectionError {
     /// Describes a failed confirmation without exposing message content.
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::WorkspaceMismatch => formatter.write_str("message belongs to another workspace"),
-            Self::AuthorMismatch => formatter.write_str("message is not authored by the active user"),
-            Self::EmptySelection => formatter.write_str("no messages have been selected"),
-            Self::ConfirmationCountMismatch => formatter.write_str("confirmation count does not match selection"),
+            Self::WorkspaceMismatch => f.write_str("message belongs to another workspace"),
+            Self::AuthorMismatch => f.write_str("message is not authored by the active user"),
+            Self::EmptySelection => f.write_str("no messages have been selected"),
+            Self::ConfirmationCountMismatch => f.write_str("confirmation count does not match selection"),
         }
     }
 }
@@ -52,6 +52,9 @@ impl Selection {
 
     /// Adds a discovered message only when author and workspace match exactly.
     ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
+    ///
     /// This is a review check, not a replacement for authorization immediately
     /// before sending a deletion request.
     pub fn insert(&mut self, message: &Message) -> Result<bool, SelectionError> {
@@ -60,6 +63,9 @@ impl Selection {
     }
 
     /// Adds only messages matching the visible filter, atomically validating ownership.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     ///
     /// A mixed-author or cross-workspace result set causes *zero* new selections,
     /// rather than leaving a partly approved "select all filtered" operation.
@@ -98,6 +104,9 @@ impl Selection {
     }
 
     /// Creates an immutable snapshot after an exact-count user confirmation.
+    ///
+    /// # Errors
+    /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn confirm(&self, confirmed_count: usize) -> Result<ConfirmedBatch, SelectionError> {
         if self.keys.is_empty() {
             return Err(SelectionError::EmptySelection);

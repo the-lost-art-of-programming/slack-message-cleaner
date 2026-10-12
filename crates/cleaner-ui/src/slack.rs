@@ -64,7 +64,7 @@ impl<'a> Slack<'a> {
             let response = request.send().await.map_err(|_| SlackError::Transport)?;
             if response.status() == 429 {
                 let delay = response.headers().get("retry-after")
-                    .ok().flatten().and_then(|seconds| seconds.parse::<u32>().ok())
+                    .and_then(|seconds| seconds.parse::<u32>().ok())
                     .unwrap_or(3).clamp(1, 30);
                 TimeoutFuture::new(delay.saturating_mul(1000)).await;
                 if attempt == 2 {
