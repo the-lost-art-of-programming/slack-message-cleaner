@@ -95,7 +95,8 @@ until deliberately unlocked via the `live-delete` Cargo feature.
 ## Testing and quality gates
 
 - Every change gets unit tests and relevant integration tests before shipping.
-- Host-native core: 90% line and 80% region coverage minimum, excluding only
+- Host-native core: target 90% line and 80% region coverage (enforcement pending
+  coverage job), excluding only
   trivial entrypoint glue; protect critical deletion invariants at higher levels.
 - Mutation testing for ownership, selection, job state, retry/backoff, and
   idempotence. Property tests for parsers, deduplication and state transitions.
@@ -118,10 +119,10 @@ until deliberately unlocked via the `live-delete` Cargo feature.
 
 ## Implementation gate
 
-Do not start Rust application code until these conventions, platform
-limitations, data model, and opt-in deletion safety requirements are accepted
-for the specific implementation task. The pre-code configuration itself is not
-proof the extension works.
+Rust implementation is underway. Before enabling live deletion, demonstrate
+working Firefox/WASM integration and a disposable Slack-workspace test with
+verified account and ownership. A green CI run alone does not authorize
+unsupervised deletion or prove compatibility with restricted workspaces.
 
 ## Praxis code formatting and tested documentation
 
