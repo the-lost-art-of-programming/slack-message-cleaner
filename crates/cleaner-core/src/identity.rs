@@ -1,6 +1,7 @@
 //! Validated account and message identities used across every safety boundary.
 
 use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 /// Maximum accepted length for an opaque Slack workspace, user, or conversation ID.
@@ -165,7 +166,11 @@ impl MessageKey {
     /// Combines already validated identity components into a stable key.
     #[must_use]
     pub fn new(workspace: WorkspaceId, conversation: ConversationId, timestamp: MessageTs) -> Self {
-        Self { workspace, conversation, timestamp }
+        Self {
+            workspace,
+            conversation,
+            timestamp,
+        }
     }
 
     /// Returns the workspace component of this key.
@@ -191,7 +196,9 @@ impl MessageKey {
 fn validate_identifier(raw: &str) -> Result<(), IdentityError> {
     if raw.is_empty()
         || raw.len() > MAX_IDENTIFIER_BYTES
-        || !raw.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        || !raw
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
     {
         return Err(IdentityError::InvalidIdentifier);
     }
@@ -205,19 +212,47 @@ mod tests {
     /// Identifier validation rejects whitespace, emptiness, and long tokens.
     #[test]
     fn identifiers_reject_whitespace_and_unbounded_input() {
-        assert_eq!(WorkspaceId::parse(" T123"), Err(IdentityError::InvalidIdentifier), "whitespace is forbidden");
-        assert_eq!(UserId::parse(""), Err(IdentityError::InvalidIdentifier), "empty user ID is forbidden");
-        assert_eq!(ConversationId::parse(&"C".repeat(129)), Err(IdentityError::InvalidIdentifier), "unbounded input is forbidden");
+        assert_eq!(
+            WorkspaceId::parse(" T123"),
+            Err(IdentityError::InvalidIdentifier),
+            "whitespace is forbidden"
+        );
+        assert_eq!(
+            UserId::parse(""),
+            Err(IdentityError::InvalidIdentifier),
+            "empty user ID is forbidden"
+        );
+        assert_eq!(
+            ConversationId::parse(&"C".repeat(129)),
+            Err(IdentityError::InvalidIdentifier),
+            "unbounded input is forbidden"
+        );
     }
 
     /// Timestamp parsing preserves exact decimal precision.
     #[test]
     fn timestamps_are_exact_and_never_parsed_as_floating_point() -> Result<(), IdentityError> {
         let timestamp = MessageTs::parse("1712345678.000001")?;
-        assert_eq!(timestamp.as_str(), "1712345678.000001", "timestamp representation must remain unchanged");
-        assert_eq!(MessageTs::parse("1712345678"), Err(IdentityError::InvalidTimestamp), "missing fraction is invalid");
-        assert_eq!(MessageTs::parse("1712345678.00000x"), Err(IdentityError::InvalidTimestamp), "nondecimal fraction is invalid");
-        assert_eq!(MessageTs::parse("1712345678.0000001"), Err(IdentityError::InvalidTimestamp), "overprecision is invalid");
+        assert_eq!(
+            timestamp.as_str(),
+            "1712345678.000001",
+            "timestamp representation must remain unchanged"
+        );
+        assert_eq!(
+            MessageTs::parse("1712345678"),
+            Err(IdentityError::InvalidTimestamp),
+            "missing fraction is invalid"
+        );
+        assert_eq!(
+            MessageTs::parse("1712345678.00000x"),
+            Err(IdentityError::InvalidTimestamp),
+            "nondecimal fraction is invalid"
+        );
+        assert_eq!(
+            MessageTs::parse("1712345678.0000001"),
+            Err(IdentityError::InvalidTimestamp),
+            "overprecision is invalid"
+        );
         Ok(())
     }
 }

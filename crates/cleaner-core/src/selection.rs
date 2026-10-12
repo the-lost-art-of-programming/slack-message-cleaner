@@ -1,11 +1,13 @@
 //! Verified local selection and exact-count confirmation of immutable batches.
 
-use std::collections::BTreeSet;
-use std::fmt;
+use std::{collections::BTreeSet, fmt};
+
 use serde::{Deserialize, Serialize};
 
-use crate::identity::{Account, MessageKey};
-use crate::message::{Message, ReviewFilter};
+use crate::{
+    identity::{Account, MessageKey},
+    message::{Message, ReviewFilter},
+};
 
 /// Reasons an item or batch cannot advance from review into a confirmed queue.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -47,7 +49,10 @@ impl Selection {
     /// Starts a review selection with nothing implicitly selected.
     #[must_use]
     pub fn new(account: Account) -> Self {
-        Self { account, keys: BTreeSet::new() }
+        Self {
+            account,
+            keys: BTreeSet::new(),
+        }
     }
 
     /// Adds a discovered message only when author and workspace match exactly.
@@ -69,11 +74,7 @@ impl Selection {
     ///
     /// A mixed-author or cross-workspace result set causes *zero* new selections,
     /// rather than leaving a partly approved "select all filtered" operation.
-    pub fn insert_filtered(
-        &mut self,
-        messages: &[Message],
-        filter: &ReviewFilter,
-    ) -> Result<usize, SelectionError> {
+    pub fn insert_filtered(&mut self, messages: &[Message], filter: &ReviewFilter) -> Result<usize, SelectionError> {
         for message in messages.iter().filter(|message| filter.matches(message)) {
             self.validate(message)?;
         }
@@ -114,7 +115,10 @@ impl Selection {
         if confirmed_count != self.keys.len() {
             return Err(SelectionError::ConfirmationCountMismatch);
         }
-        Ok(ConfirmedBatch { account: self.account.clone(), keys: self.keys.iter().cloned().collect() })
+        Ok(ConfirmedBatch {
+            account: self.account.clone(),
+            keys: self.keys.iter().cloned().collect(),
+        })
     }
 
     /// Refuses mismatched discovery data before changing the selection.
@@ -159,13 +163,19 @@ impl ConfirmedBatch {
 #[cfg(test)]
 mod tests {
     use super::{Selection, SelectionError};
-    use crate::identity::{Account, ConversationId, IdentityError, MessageKey, MessageTs, UserId, WorkspaceId};
-    use crate::message::{ConversationKind, Message, ReviewFilter, ThreadFilter};
+    use crate::{
+        identity::{Account, ConversationId, IdentityError, MessageKey, MessageTs, UserId, WorkspaceId},
+        message::{ConversationKind, Message, ReviewFilter, ThreadFilter},
+    };
 
     /// Constructs a review fixture without an authenticated browser session.
     fn message(workspace: &str, author: &str, timestamp: &str) -> Result<Message, IdentityError> {
         Ok(Message::new(
-            MessageKey::new(WorkspaceId::parse(workspace)?, ConversationId::parse("C1")?, MessageTs::parse(timestamp)?),
+            MessageKey::new(
+                WorkspaceId::parse(workspace)?,
+                ConversationId::parse("C1")?,
+                MessageTs::parse(timestamp)?,
+            ),
             UserId::parse(author)?,
             ConversationKind::PublicChannel,
             None,
@@ -178,32 +188,68 @@ mod tests {
     fn selection_never_crosses_account_boundaries() -> Result<(), IdentityError> {
         let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
         let mut selection = Selection::new(account);
-        assert_eq!(selection.insert(&message("T2", "U1", "1.000001")?), Err(SelectionError::WorkspaceMismatch),
-            "cross-workspace record must never be selected");
-        assert_eq!(selection.insert(&message("T1", "U2", "1.000001")?), Err(SelectionError::AuthorMismatch),
-            "another author's message must never be selected");
+        assert_eq!(
+            selection.insert(&message("T2", "U1", "1.000001")?),
+            Err(SelectionError::WorkspaceMismatch),
+            "cross-workspace record must never be selected"
+        );
+        assert_eq!(
+            selection.insert(&message("T1", "U2", "1.000001")?),
+            Err(SelectionError::AuthorMismatch),
+            "another author's message must never be selected"
+        );
         assert_eq!(selection.len(), 0, "rejected inserts must not alter the selection");
-        assert_eq!(selection.confirm(0), Err(SelectionError::EmptySelection),
-            "empty review must never be promoted to a deletion batch");
+        assert_eq!(
+            selection.confirm(0),
+            Err(SelectionError::EmptySelection),
+            "empty review must never be promoted to a deletion batch"
+        );
         Ok(())
     }
 
     /// Confirms only an explicitly counted, deduplicated, frozen key set.
     #[test]
-    fn confirmation_is_deduplicated_and_independent_of_later_review_changes() -> Result<(), Box<dyn std::error::Error>> {
+    fn confirmation_is_deduplicated_and_independent_of_later_review_changes() -> Result<(), Box<dyn std::error::Error>>
+    {
         let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
         let mut selection = Selection::new(account);
         let first = message("T1", "U1", "1.000001")?;
         let second = message("T1", "U1", "1.000002")?;
-        assert_eq!(selection.insert(&first), Ok(true), "first insertion must select message");
-        assert_eq!(selection.insert(&first), Ok(false), "duplicate must not inflate selection count");
-        assert_eq!(selection.insert(&second), Ok(true), "second distinct message must be selected");
-        assert_eq!(selection.confirm(1), Err(SelectionError::ConfirmationCountMismatch),
-            "wrong confirmation count must not create a deletion batch");
+        assert_eq!(
+            selection.insert(&first),
+            Ok(true),
+            "first insertion must select message"
+        );
+        assert_eq!(
+            selection.insert(&first),
+            Ok(false),
+            "duplicate must not inflate selection count"
+        );
+        assert_eq!(
+            selection.insert(&second),
+            Ok(true),
+            "second distinct message must be selected"
+        );
+        assert_eq!(
+            selection.confirm(1),
+            Err(SelectionError::ConfirmationCountMismatch),
+            "wrong confirmation count must not create a deletion batch"
+        );
         let batch = selection.confirm(2)?;
-        assert!(selection.remove(first.key()), "selected item can be removed from review");
-        assert_eq!(batch.keys().len(), 2, "confirmed snapshot must not change with later review edits");
-        assert_eq!(selection.len(), 1, "review selection should still be editable independently");
+        assert!(
+            selection.remove(first.key()),
+            "selected item can be removed from review"
+        );
+        assert_eq!(
+            batch.keys().len(),
+            2,
+            "confirmed snapshot must not change with later review edits"
+        );
+        assert_eq!(
+            selection.len(),
+            1,
+            "review selection should still be editable independently"
+        );
         Ok(())
     }
 
@@ -215,8 +261,15 @@ mod tests {
         let visible = message("T1", "U1", "1.000001")?;
         let foreign = message("T1", "U2", "1.000002")?;
         let hidden = Message::new(
-            MessageKey::new(WorkspaceId::parse("T1")?, ConversationId::parse("C2")?, MessageTs::parse("1.000003")?),
-            UserId::parse("U1")?, ConversationKind::DirectMessage, None, "hidden".to_owned(),
+            MessageKey::new(
+                WorkspaceId::parse("T1")?,
+                ConversationId::parse("C2")?,
+                MessageTs::parse("1.000003")?,
+            ),
+            UserId::parse("U1")?,
+            ConversationKind::DirectMessage,
+            None,
+            "hidden".to_owned(),
         );
         let filter = ReviewFilter {
             kind: Some(ConversationKind::PublicChannel),
@@ -224,11 +277,17 @@ mod tests {
             thread: ThreadFilter::All,
             query: None,
         };
-        assert_eq!(selection.insert_filtered(&[visible.clone(), foreign], &filter), Err(SelectionError::AuthorMismatch),
-            "invalid visible author must make bulk selection atomic");
+        assert_eq!(
+            selection.insert_filtered(&[visible.clone(), foreign], &filter),
+            Err(SelectionError::AuthorMismatch),
+            "invalid visible author must make bulk selection atomic"
+        );
         assert_eq!(selection.len(), 0, "no partial selection is allowed");
-        assert_eq!(selection.insert_filtered(&[visible, hidden], &filter), Ok(1),
-            "only items satisfying every visible filter are added");
+        assert_eq!(
+            selection.insert_filtered(&[visible, hidden], &filter),
+            Ok(1),
+            "only items satisfying every visible filter are added"
+        );
         assert_eq!(selection.len(), 1, "hidden messages must not be implicitly selected");
         Ok(())
     }

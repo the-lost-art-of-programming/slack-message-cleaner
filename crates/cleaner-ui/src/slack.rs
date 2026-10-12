@@ -60,12 +60,16 @@ impl<'a> Slack<'a> {
             let request = Request::post(&url)
                 .header("Authorization", &format!("Bearer {}", self.token))
                 .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .body(body.clone()).map_err(|_| SlackError::Transport)?;
+                .body(body.clone())
+                .map_err(|_| SlackError::Transport)?;
             let response = request.send().await.map_err(|_| SlackError::Transport)?;
             if response.status() == 429 {
-                let delay = response.headers().get("retry-after")
+                let delay = response
+                    .headers()
+                    .get("retry-after")
                     .and_then(|seconds| seconds.parse::<u32>().ok())
-                    .unwrap_or(3).clamp(1, 30);
+                    .unwrap_or(3)
+                    .clamp(1, 30);
                 TimeoutFuture::new(delay.saturating_mul(1000)).await;
                 if attempt == 2 {
                     return Err(SlackError::RateLimited);
@@ -75,7 +79,10 @@ impl<'a> Slack<'a> {
             if !response.ok() {
                 return Err(SlackError::Api(format!("http_{}", response.status())));
             }
-            let data = response.json::<Value>().await.map_err(|_| SlackError::InvalidResponse)?;
+            let data = response
+                .json::<Value>()
+                .await
+                .map_err(|_| SlackError::InvalidResponse)?;
             if data.get("ok").and_then(Value::as_bool) != Some(true) {
                 let code = data.get("error").and_then(Value::as_str).unwrap_or("unknown_error");
                 return Err(SlackError::Api(code.chars().take(100).collect()));

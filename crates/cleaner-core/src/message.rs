@@ -53,7 +53,13 @@ impl Message {
         thread_parent: Option<MessageTs>,
         preview: String,
     ) -> Self {
-        Self { key, author, kind, thread_parent, preview }
+        Self {
+            key,
+            author,
+            kind,
+            thread_parent,
+            preview,
+        }
     }
 
     /// Returns the stable key used to select and deduplicate this record.
@@ -114,9 +120,10 @@ impl ReviewFilter {
             ThreadFilter::RepliesOnly => message.thread_parent().is_some(),
             ThreadFilter::TopLevelOnly => message.thread_parent().is_none(),
         };
-        let query_matches = self.query.as_ref().is_none_or(|query| {
-            message.preview().to_lowercase().contains(&query.to_lowercase())
-        });
+        let query_matches = self
+            .query
+            .as_ref()
+            .is_none_or(|query| message.preview().to_lowercase().contains(&query.to_lowercase()));
         kind_matches && conversation_matches && thread_matches && query_matches
     }
 }
@@ -130,7 +137,11 @@ mod tests {
     #[test]
     fn threads_can_be_filtered_within_their_original_conversation_bucket() -> Result<(), IdentityError> {
         let message = Message::new(
-            MessageKey::new(WorkspaceId::parse("T1")?, ConversationId::parse("D1")?, MessageTs::parse("1.000002")?),
+            MessageKey::new(
+                WorkspaceId::parse("T1")?,
+                ConversationId::parse("D1")?,
+                MessageTs::parse("1.000002")?,
+            ),
             UserId::parse("U1")?,
             ConversationKind::DirectMessage,
             Some(MessageTs::parse("1.000001")?),
@@ -142,9 +153,18 @@ mod tests {
             thread: ThreadFilter::RepliesOnly,
             query: Some("OLD thread".to_owned()),
         };
-        assert!(filter.matches(&message), "matching DM reply must appear in DM thread navigation");
-        assert!(!ReviewFilter { thread: ThreadFilter::TopLevelOnly, ..filter }.matches(&message),
-            "reply must not appear in top-level-only view");
+        assert!(
+            filter.matches(&message),
+            "matching DM reply must appear in DM thread navigation"
+        );
+        assert!(
+            !ReviewFilter {
+                thread: ThreadFilter::TopLevelOnly,
+                ..filter
+            }
+            .matches(&message),
+            "reply must not appear in top-level-only view"
+        );
         Ok(())
     }
 }

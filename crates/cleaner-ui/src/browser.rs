@@ -25,15 +25,20 @@ fn call(target: &JsValue, method: &str, arguments: &[JsValue]) -> Result<JsValue
         array.push(argument);
         array
     });
-    function.apply(target, &arguments).map_err(|_| format!("Browser method {method} failed"))
+    function
+        .apply(target, &arguments)
+        .map_err(|_| format!("Browser method {method} failed"))
 }
 
 /// Resolves a standard promise from a WebExtensions API.
 async fn promised(target: &JsValue, method: &str, arguments: &[JsValue]) -> Result<JsValue, String> {
     let response = call(target, method, arguments)?;
-    let promise = response.dyn_into::<Promise>()
+    let promise = response
+        .dyn_into::<Promise>()
         .map_err(|_| format!("Browser method {method} did not return a Promise"))?;
-    JsFuture::from(promise).await.map_err(|_| format!("Browser {method} request rejected"))
+    JsFuture::from(promise)
+        .await
+        .map_err(|_| format!("Browser {method} request rejected"))
 }
 
 /// Selects either ephemeral session or durable local browser storage.
@@ -45,22 +50,32 @@ fn storage(area: &str) -> Result<JsValue, String> {
 pub async fn get_session_token() -> Result<Option<String>, String> {
     let target = storage("session")?;
     let record = promised(&target, "get", &[JsValue::from_str("slack_session_token")]).await?;
-    Ok(property(&record, "slack_session_token")?.as_string()
+    Ok(property(&record, "slack_session_token")?
+        .as_string()
         .filter(|value| value.starts_with("xox") && value.len() <= 2048))
 }
 
 /// Writes a token to Firefox's in-memory, session-scoped storage only.
 pub async fn save_session_token(token: &str) -> Result<(), String> {
     let record = Object::new();
-    Reflect::set(&record, &JsValue::from_str("slack_session_token"), &JsValue::from_str(token))
-        .map_err(|_| "Cannot create session token record".to_owned())?;
+    Reflect::set(
+        &record,
+        &JsValue::from_str("slack_session_token"),
+        &JsValue::from_str(token),
+    )
+    .map_err(|_| "Cannot create session token record".to_owned())?;
     let _response = promised(&storage("session")?, "set", &[record.into()]).await?;
     Ok(())
 }
 
 /// Erases captured credentials without clearing the user's review checkpoints.
 pub async fn clear_session_token() -> Result<(), String> {
-    let _response = promised(&storage("session")?, "remove", &[JsValue::from_str("slack_session_token")]).await?;
+    let _response = promised(
+        &storage("session")?,
+        "remove",
+        &[JsValue::from_str("slack_session_token")],
+    )
+    .await?;
     Ok(())
 }
 
@@ -77,9 +92,12 @@ pub async fn save_local<T: Serialize>(key: &str, value: &T) -> Result<(), String
 /// Loads a durable review state, deferring its integrity checks to the domain layer.
 pub async fn get_local<T: DeserializeOwned>(key: &str) -> Result<Option<T>, String> {
     let record = promised(&storage("local")?, "get", &[JsValue::from_str(key)]).await?;
-    property(&record, key)?.as_string().map(|serialized| {
-        serde_json::from_str(&serialized).map_err(|_| "Saved checkpoint is not valid JSON".to_owned())
-    }).transpose()
+    property(&record, key)?
+        .as_string()
+        .map(|serialized| {
+            serde_json::from_str(&serialized).map_err(|_| "Saved checkpoint is not valid JSON".to_owned())
+        })
+        .transpose()
 }
 
 /// Extracts Slack's own form-body session token from a browser request event.
@@ -131,7 +149,11 @@ pub fn register_capture(token: RwSignal<Option<String>>, status: RwSignal<String
         .map_err(|_| "Cannot configure Slack request listener".to_owned())?;
     let extras = Array::new();
     extras.push(&JsValue::from_str("requestBody"));
-    let _result = call(&event, "addListener", &[callback.as_ref().clone(), filter.into(), extras.into()])?;
+    let _result = call(
+        &event,
+        "addListener",
+        &[callback.as_ref().clone(), filter.into(), extras.into()],
+    )?;
     callback.forget();
     Ok(())
 }

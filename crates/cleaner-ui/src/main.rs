@@ -10,8 +10,7 @@ mod slack;
 
 use std::collections::BTreeSet;
 
-use cleaner_core::message::ConversationKind;
-use cleaner_core::queue::ItemState;
+use cleaner_core::{message::ConversationKind, queue::ItemState};
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
@@ -24,19 +23,24 @@ const PAGE_SIZE: usize = 100;
 #[must_use]
 fn visible_messages(data: &WorkspaceData, category: &str, channel: &str, query: &str) -> Vec<OwnedMessage> {
     let phrase = query.to_lowercase();
-    data.messages.iter().filter(|message| {
-        let category_matches = match category {
-            "public" => message.kind == ConversationKind::PublicChannel,
-            "private" => message.kind == ConversationKind::PrivateChannel,
-            "dm" => message.kind == ConversationKind::DirectMessage,
-            "group" => message.kind == ConversationKind::GroupDirectMessage,
-            "threads" => message.parent.is_some(),
-            "all" => true,
-            _ => false,
-        };
-        category_matches && (channel.is_empty() || message.channel == channel)
-            && message.preview.to_lowercase().contains(&phrase)
-    }).cloned().collect()
+    data.messages
+        .iter()
+        .filter(|message| {
+            let category_matches = match category {
+                "public" => message.kind == ConversationKind::PublicChannel,
+                "private" => message.kind == ConversationKind::PrivateChannel,
+                "dm" => message.kind == ConversationKind::DirectMessage,
+                "group" => message.kind == ConversationKind::GroupDirectMessage,
+                "threads" => message.parent.is_some(),
+                "all" => true,
+                _ => false,
+            };
+            category_matches
+                && (channel.is_empty() || message.channel == channel)
+                && message.preview.to_lowercase().contains(&phrase)
+        })
+        .cloned()
+        .collect()
 }
 
 /// Friendly status title for an item in a durable, manually resumed job.
@@ -75,21 +79,26 @@ fn App() -> impl IntoView {
             Ok(Some(captured)) => {
                 token.set(Some(captured));
                 status.set("Existing browser-session token found. Select Connect.".to_owned());
-            }
-            Ok(None) => {}
+            },
+            Ok(None) => {},
             Err(error) => status.set(format!("Session storage unavailable: {error}")),
         }
     });
 
     let connect = move |_| {
-        if busy.get_untracked() { return; }
+        if busy.get_untracked() {
+            return;
+        }
         busy.set(true);
         spawn_local(async move {
             let result = async {
-                let captured = token.get_untracked().ok_or("No captured token. Refresh an authenticated Slack tab.")?;
+                let captured = token
+                    .get_untracked()
+                    .ok_or("No captured token. Refresh an authenticated Slack tab.")?;
                 let (workspace, user) = delete::verify_account(&captured).await?;
                 let key = scan::storage_key(&workspace, &user);
-                let mut restored = browser::get_local::<WorkspaceData>(&key).await?
+                let mut restored = browser::get_local::<WorkspaceData>(&key)
+                    .await?
                     .unwrap_or_else(|| WorkspaceData::new(workspace.clone(), user.clone()));
                 if restored.workspace != workspace || restored.user != user {
                     return Err("Saved data belongs to a different Slack account".to_owned());
@@ -107,7 +116,8 @@ fn App() -> impl IntoView {
                 data.set(restored);
                 selected.set(BTreeSet::new());
                 Ok::<(String, String), String>((workspace, user))
-            }.await;
+            }
+            .await;
             match result {
                 Ok((workspace, user)) => status.set(format!("Authenticated as {user} in {workspace}. Ready to scan.")),
                 Err(error) => status.set(format!("Connection failed: {error}")),
@@ -117,8 +127,9 @@ fn App() -> impl IntoView {
     };
 
     let scan = move |_| {
-        if busy.get_untracked() || data.get_untracked().workspace.is_empty()
-            || data.get_untracked().job.is_some() { return; }
+        if busy.get_untracked() || data.get_untracked().workspace.is_empty() || data.get_untracked().job.is_some() {
+            return;
+        }
         busy.set(true);
         stop.set(false);
         spawn_local(async move {
@@ -127,78 +138,112 @@ fn App() -> impl IntoView {
                 match delete::verify_account(&captured).await {
                     Ok((workspace, user)) if workspace == current.workspace && user == current.user => {
                         scan::scan_all(&captured, current, data, status, stop).await
-                    }
+                    },
                     Ok(_) => Err("Active Slack account changed. Scan aborted.".to_owned()),
                     Err(error) => Err(error),
                 }
-            } else { Err("No authenticated Slack session".to_owned()) };
-            if let Err(error) = result { status.set(error); }
+            } else {
+                Err("No authenticated Slack session".to_owned())
+            };
+            if let Err(error) = result {
+                status.set(error);
+            }
             selected.set(BTreeSet::new());
             busy.set(false);
         });
     };
 
     let select_visible = move |_| {
-        let items = visible_messages(&data.get_untracked(), &category.get_untracked(),
-            &conversation.get_untracked(), &query.get_untracked());
+        let items = visible_messages(
+            &data.get_untracked(),
+            &category.get_untracked(),
+            &conversation.get_untracked(),
+            &query.get_untracked(),
+        );
         selected.update(|keys| {
-            for item in items { keys.insert(item.identifier()); }
+            for item in items {
+                keys.insert(item.identifier());
+            }
         });
     };
 
     let select_page = move |_| {
-        let items = visible_messages(&data.get_untracked(), &category.get_untracked(),
-            &conversation.get_untracked(), &query.get_untracked());
+        let items = visible_messages(
+            &data.get_untracked(),
+            &category.get_untracked(),
+            &conversation.get_untracked(),
+            &query.get_untracked(),
+        );
         selected.update(|keys| {
-            for item in items.into_iter().skip(page.get_untracked().saturating_mul(PAGE_SIZE)).take(PAGE_SIZE) {
+            for item in items
+                .into_iter()
+                .skip(page.get_untracked().saturating_mul(PAGE_SIZE))
+                .take(PAGE_SIZE)
+            {
                 keys.insert(item.identifier());
             }
         });
     };
 
     let create_job = move |_| {
-        if busy.get_untracked() || data.get_untracked().job.is_some() { return; }
+        if busy.get_untracked() || data.get_untracked().job.is_some() {
+            return;
+        }
         let current = data.get_untracked();
         let chosen = selected.get_untracked();
         let count = typed_count.get_untracked().parse::<usize>().unwrap_or(0);
-        let approved: Vec<OwnedMessage> = current.messages.iter()
+        let approved: Vec<OwnedMessage> = current
+            .messages
+            .iter()
             .filter(|message| chosen.contains(&message.identifier()))
-            .cloned().collect();
+            .cloned()
+            .collect();
         match delete::make_job(&current, &approved, count) {
             Ok(job) => {
                 let mut snapshot = current;
                 snapshot.job = Some(job);
                 busy.set(true);
                 spawn_local(async move {
-                    match browser::save_local(&scan::storage_key(&snapshot.workspace, &snapshot.user), &snapshot).await {
+                    match browser::save_local(&scan::storage_key(&snapshot.workspace, &snapshot.user), &snapshot).await
+                    {
                         Ok(()) => {
                             data.set(snapshot);
                             status.set("Job confirmed and paused. Select Resume to begin deletion.".to_owned());
-                        }
+                        },
                         Err(error) => status.set(format!("Job not queued: {error}")),
                     }
                     busy.set(false);
                 });
-            }
-            Err(error) => status.set(format!("Batch was not created: {error}. Enter the exact selection count.")),
+            },
+            Err(error) => status.set(format!(
+                "Batch was not created: {error}. Enter the exact selection count."
+            )),
         }
     };
 
     let resume = move |_| {
-        if busy.get_untracked() || data.get_untracked().job.is_none() { return; }
+        if busy.get_untracked() || data.get_untracked().job.is_none() {
+            return;
+        }
         busy.set(true);
         stop.set(false);
         spawn_local(async move {
             let result = if let Some(captured) = token.get_untracked() {
                 delete::resume_job(&captured, data, status, stop).await
-            } else { Err("Slack session must be recaptured before resuming".to_owned()) };
-            if let Err(error) = result { status.set(format!("Deletion paused: {error}")); }
+            } else {
+                Err("Slack session must be recaptured before resuming".to_owned())
+            };
+            if let Err(error) = result {
+                status.set(format!("Deletion paused: {error}"));
+            }
             busy.set(false);
         });
     };
 
     let clear_job = move |_| {
-        if busy.get_untracked() { return; }
+        if busy.get_untracked() {
+            return;
+        }
         let mut current = data.get_untracked();
         if let Some(job) = &current.job {
             if job.entries.iter().any(|entry| entry.status == ItemState::InFlight) {
@@ -213,7 +258,7 @@ fn App() -> impl IntoView {
                 Ok(()) => {
                     data.set(current);
                     status.set("Job discarded. Existing messages were not restored or retried.".to_owned());
-                }
+                },
                 Err(error) => status.set(format!("Could not discard job: {error}")),
             }
             busy.set(false);
@@ -221,10 +266,15 @@ fn App() -> impl IntoView {
     };
 
     let forget_token = move |_| {
-        if busy.get_untracked() { return; }
+        if busy.get_untracked() {
+            return;
+        }
         spawn_local(async move {
             match browser::clear_session_token().await {
-                Ok(()) => { token.set(None); status.set("Credential erased; refresh Slack to recapture.".to_owned()); }
+                Ok(()) => {
+                    token.set(None);
+                    status.set("Credential erased; refresh Slack to recapture.".to_owned());
+                },
                 Err(error) => status.set(format!("Unable to clear session: {error}")),
             }
         });

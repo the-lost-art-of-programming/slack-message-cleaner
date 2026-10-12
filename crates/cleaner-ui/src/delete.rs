@@ -1,22 +1,35 @@
 //! Safe, sequential deletion with independent ownership checks and checkpoints.
 
-use cleaner_core::identity::{Account, UserId, WorkspaceId};
-use cleaner_core::queue::{AttemptOutcome, ItemState};
+use cleaner_core::{
+    identity::{Account, UserId, WorkspaceId},
+    queue::{AttemptOutcome, ItemState},
+};
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 use serde_json::Value;
 
-use crate::browser;
-use crate::model::{JobEntry, OwnedMessage, SavedJob, WorkspaceData};
-use crate::scan::storage_key;
-use crate::slack::{Slack, SlackError};
+use crate::{
+    browser,
+    model::{JobEntry, OwnedMessage, SavedJob, WorkspaceData},
+    scan::storage_key,
+    slack::{Slack, SlackError},
+};
 
 /// Verified identity from Slack's live `auth.test` response.
 pub async fn verify_account(token: &str) -> Result<(String, String), String> {
-    let response = Slack::new(token).call("auth.test", &[]).await.map_err(|error| error.to_string())?;
-    let workspace = response.get("team_id").and_then(Value::as_str)
-        .ok_or("Slack did not return a workspace ID")?.to_owned();
-    let user = response.get("user_id").and_then(Value::as_str)
-        .ok_or("Slack did not return a user ID")?.to_owned();
+    let response = Slack::new(token)
+        .call("auth.test", &[])
+        .await
+        .map_err(|error| error.to_string())?;
+    let workspace = response
+        .get("team_id")
+        .and_then(Value::as_str)
+        .ok_or("Slack did not return a workspace ID")?
+        .to_owned();
+    let user = response
+        .get("user_id")
+        .and_then(Value::as_str)
+        .ok_or("Slack did not return a user ID")?
+        .to_owned();
     WorkspaceId::parse(&workspace).map_err(|error| error.to_string())?;
     UserId::parse(&user).map_err(|error| error.to_string())?;
     Ok((workspace, user))
@@ -27,8 +40,10 @@ pub async fn verify_account(token: &str) -> Result<(String, String), String> {
 /// # Errors
 /// Refuses empty sets, wrong counts, other-account data, or duplicates.
 pub fn make_job(data: &WorkspaceData, selected: &[OwnedMessage], count: usize) -> Result<SavedJob, String> {
-    let account = Account::new(WorkspaceId::parse(&data.workspace).map_err(|e| e.to_string())?,
-        UserId::parse(&data.user).map_err(|e| e.to_string())?);
+    let account = Account::new(
+        WorkspaceId::parse(&data.workspace).map_err(|e| e.to_string())?,
+        UserId::parse(&data.user).map_err(|e| e.to_string())?,
+    );
     let mut selection = cleaner_core::selection::Selection::new(account);
     for message in selected {
         let domain = message.domain(&data.workspace, &data.user)?;
@@ -36,16 +51,30 @@ pub fn make_job(data: &WorkspaceData, selected: &[OwnedMessage], count: usize) -
     }
     let confirmed = selection.confirm(count).map_err(|error| error.to_string())?;
     let selected_keys = confirmed.keys();
-    let mut entries: Vec<JobEntry> = selected.iter()
-        .filter_map(|message| message.domain(&data.workspace, &data.user).ok()
-            .filter(|domain| selected_keys.contains(&domain.key().clone()))
-            .map(|_| JobEntry { message: message.clone(), status: ItemState::Queued }))
+    let mut entries: Vec<JobEntry> = selected
+        .iter()
+        .filter_map(|message| {
+            message
+                .domain(&data.workspace, &data.user)
+                .ok()
+                .filter(|domain| selected_keys.contains(&domain.key().clone()))
+                .map(|_| JobEntry {
+                    message: message.clone(),
+                    status: ItemState::Queued,
+                })
+        })
         .collect();
     entries.sort_by(|left, right| {
-        left.message.parent.is_none().cmp(&right.message.parent.is_none())
+        left.message
+            .parent
+            .is_none()
+            .cmp(&right.message.parent.is_none())
             .then(left.message.identifier().cmp(&right.message.identifier()))
     });
-    let job = SavedJob { confirmed_count: count, entries };
+    let job = SavedJob {
+        confirmed_count: count,
+        entries,
+    };
     let _queue = data.verified_queue(&job)?;
     Ok(job)
 }
@@ -53,37 +82,67 @@ pub fn make_job(data: &WorkspaceData, selected: &[OwnedMessage], count: usize) -
 /// Ensures an exact matching user-authored item still exists immediately before deletion.
 async fn preflight(slack: &Slack<'_>, message: &OwnedMessage, user: &str) -> Result<bool, SlackError> {
     let response = if let Some(root) = &message.parent {
-        slack.call("conversations.replies", &[
-            ("channel", &message.channel), ("ts", root),
-            ("oldest", &message.timestamp), ("latest", &message.timestamp),
-            ("inclusive", "true"), ("limit", "100"),
-        ]).await?
+        slack
+            .call(
+                "conversations.replies",
+                &[
+                    ("channel", &message.channel),
+                    ("ts", root),
+                    ("oldest", &message.timestamp),
+                    ("latest", &message.timestamp),
+                    ("inclusive", "true"),
+                    ("limit", "100"),
+                ],
+            )
+            .await?
     } else {
-        slack.call("conversations.history", &[
-            ("channel", &message.channel), ("oldest", &message.timestamp),
-            ("latest", &message.timestamp), ("inclusive", "true"), ("limit", "100"),
-        ]).await?
+        slack
+            .call(
+                "conversations.history",
+                &[
+                    ("channel", &message.channel),
+                    ("oldest", &message.timestamp),
+                    ("latest", &message.timestamp),
+                    ("inclusive", "true"),
+                    ("limit", "100"),
+                ],
+            )
+            .await?
     };
-    Ok(response.get("messages").and_then(Value::as_array).into_iter().flatten()
-        .any(|raw| raw.get("ts").and_then(Value::as_str) == Some(&message.timestamp)
-            && raw.get("user").and_then(Value::as_str) == Some(user)
-            && matches!(raw.get("subtype").and_then(Value::as_str).unwrap_or(""),
-                "" | "me_message" | "file_share")))
+    Ok(response
+        .get("messages")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .any(|raw| {
+            raw.get("ts").and_then(Value::as_str) == Some(&message.timestamp)
+                && raw.get("user").and_then(Value::as_str) == Some(user)
+                && matches!(
+                    raw.get("subtype").and_then(Value::as_str).unwrap_or(""),
+                    "" | "me_message" | "file_share"
+                )
+        }))
 }
 
 /// Executes one attempt, distinguishing definite refusals from ambiguous network errors.
 async fn attempt(token: &str, message: &OwnedMessage, workspace: &str, user: &str) -> AttemptOutcome {
     match verify_account(token).await {
-        Ok((actual_workspace, actual_user)) if actual_workspace == workspace && actual_user == user => {}
+        Ok((actual_workspace, actual_user)) if actual_workspace == workspace && actual_user == user => {},
         Ok(_) | Err(_) => return AttemptOutcome::Skipped,
     }
     let slack = Slack::new(token);
     match preflight(&slack, message, user).await {
-        Ok(true) => {}
+        Ok(true) => {},
         Ok(false) => return AttemptOutcome::Skipped,
         Err(_) => return AttemptOutcome::Skipped,
     }
-    match slack.call("chat.delete", &[("channel", &message.channel), ("ts", &message.timestamp)]).await {
+    match slack
+        .call(
+            "chat.delete",
+            &[("channel", &message.channel), ("ts", &message.timestamp)],
+        )
+        .await
+    {
         Ok(_) => AttemptOutcome::Deleted,
         Err(SlackError::Transport | SlackError::RateLimited | SlackError::InvalidResponse) => AttemptOutcome::Unknown,
         Err(SlackError::Api(_)) => AttemptOutcome::Failed,
@@ -103,7 +162,9 @@ async fn checkpoint(data: &WorkspaceData, state: RwSignal<WorkspaceData>) -> Res
 /// Stops on identity changes or failures to persist checkpoints. It never
 /// automatically retries an uncertain deletion result after interruption.
 pub async fn resume_job(
-    token: &str, state: RwSignal<WorkspaceData>, status: RwSignal<String>,
+    token: &str,
+    state: RwSignal<WorkspaceData>,
+    status: RwSignal<String>,
     stop: RwSignal<bool>,
 ) -> Result<(), String> {
     if !cfg!(feature = "live-delete") {
@@ -116,8 +177,10 @@ pub async fn resume_job(
     }
     let job = data.job.as_ref().ok_or("No confirmed deletion job")?;
     let mut queue = data.verified_queue(job)?;
-    let account = Account::new(WorkspaceId::parse(&data.workspace).map_err(|e| e.to_string())?,
-        UserId::parse(&data.user).map_err(|e| e.to_string())?);
+    let account = Account::new(
+        WorkspaceId::parse(&data.workspace).map_err(|e| e.to_string())?,
+        UserId::parse(&data.user).map_err(|e| e.to_string())?,
+    );
     queue.resume(&account).map_err(|error| error.to_string())?;
     if let Some(saved) = data.job.as_mut() {
         for entry in &mut saved.entries {
@@ -146,7 +209,11 @@ pub async fn resume_job(
             entry.status = ItemState::InFlight;
         }
         checkpoint(&data, state).await?;
-        status.set(format!("Rechecking and deleting {}/{}", index.saturating_add(1), length));
+        status.set(format!(
+            "Rechecking and deleting {}/{}",
+            index.saturating_add(1),
+            length
+        ));
         let outcome = attempt(token, &message, &data.workspace, &data.user).await;
         queue.record_outcome(&key, outcome).map_err(|error| error.to_string())?;
         let finished = queue.state(&key).ok_or("Queue result missing after deletion attempt")?;
@@ -156,8 +223,14 @@ pub async fn resume_job(
         checkpoint(&data, state).await?;
     }
     queue.pause();
-    let remaining = data.job.as_ref().map_or(0, |job| job.entries.iter()
-        .filter(|entry| entry.status == ItemState::Queued).count());
-    status.set(format!("Queue stopped. {remaining} unattempted; Resume is always manual."));
+    let remaining = data.job.as_ref().map_or(0, |job| {
+        job.entries
+            .iter()
+            .filter(|entry| entry.status == ItemState::Queued)
+            .count()
+    });
+    status.set(format!(
+        "Queue stopped. {remaining} unattempted; Resume is always manual."
+    ));
     Ok(())
 }
