@@ -57,7 +57,7 @@ impl WorkspaceId {
     /// # Ok(())
     /// # }
     /// ```
-
+    ///
     /// # Errors
     /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
@@ -136,7 +136,7 @@ impl MessageTs {
     /// # Ok(())
     /// # }
     /// ```
-
+    ///
     /// # Errors
     /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
