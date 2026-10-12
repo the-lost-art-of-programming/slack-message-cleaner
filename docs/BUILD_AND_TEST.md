@@ -40,7 +40,10 @@ python3 scripts/build.py
 ```
 
 `build.py` runs core tests and builds `dist/` using Trunk, adds `manifest.json`,
-and produces `own-message-cleaner-firefox.zip`. The default build has a
+and produces `own-message-cleaner-firefox.zip`. Trunk's inline module is
+automatically externalized to `dist/trunk-bootstrap.js` to comply with
+Firefox MV3 CSP. Run `python3 -m unittest discover -s scripts -p 'test_*.py'`
+to exercise this packaging constraint. The default build has a
 **live deletion compile-time safety lock**. Only after verifying auth, ownership
 and endpoints in a disposable test workspace should a tester intentionally run
 `python3 scripts/build.py --enable-live-delete`. Generated JavaScript is

@@ -36,6 +36,8 @@ jobs:
           RUSTDOCFLAGS='-D warnings' cargo doc -p cleaner-core --no-deps
       - name: Offline security and structural checks
         run: python3 scripts/static_check.py
+      - name: Firefox CSP packaging regression tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
   dependencies:
     name: Advisory, license and source audit
     runs-on: ubuntu-24.04
