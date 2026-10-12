@@ -69,7 +69,11 @@ mod tests {
 
     /// Asserts that an acknowledged skip remains terminal after checkpointing.
     fn assert_known_skipped_result(queue: &DeletionQueue, key: &MessageKey) {
-        assert_eq!(queue.state(key), Some(ItemState::Skipped), "known outcomes are preserved");
+        assert_eq!(
+            queue.state(key),
+            Some(ItemState::Skipped),
+            "known outcomes are preserved"
+        );
     }
 
     // ---------------------------------------------------------------------------
