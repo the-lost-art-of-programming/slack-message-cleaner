@@ -1,5 +1,6 @@
-use serde::{Deserialize, Serialize};
 //! Conversation navigation and review filters; no destructive operations.
+
+use serde::{Deserialize, Serialize};
 
 use crate::identity::{ConversationId, MessageKey, MessageTs, UserId};
 
