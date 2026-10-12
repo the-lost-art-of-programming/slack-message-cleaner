@@ -25,8 +25,9 @@ jobs:
         run: python3 scripts/static_check.py
       - name: Compile and package Firefox extension
         run: |
-          cargo install --locked trunk
+          # Fail fast on Rust/WASM type errors before building Trunk.
           cargo check -p cleaner-ui --target wasm32-unknown-unknown
+          cargo install --locked trunk
           python3 scripts/build.py
       - name: Install Firefox
         uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795
