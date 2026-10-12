@@ -1,31 +1,50 @@
-# Host Rust core CI; browser and Slack integration remain blocked test gates.
 name: Rust quality
 on:
-  pull_request:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  host-core:
+  rust:
+    name: Unit, integration, lint, and Rustdoc
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Install pinned Rust and nightly rustfmt
+      - name: Install Rust toolchains
         run: |
           rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
           rustup toolchain install nightly --profile minimal --component rustfmt
-      - name: Check and test native Rust core
+      - name: Enforce consistent formatting
+        run: cargo +nightly fmt --all -- --check
+      - name: Compile core and run strict Clippy
         run: |
-          cargo check -p cleaner-core
+          cargo check -p cleaner-core --all-targets
           cargo clippy -p cleaner-core --all-targets -- -D warnings
-          cargo +nightly fmt --all -- --check
-          cargo test -p cleaner-core
-      # Add pinned cargo-audit, cargo-deny, llvm-cov and cargo-mutants jobs once
-      # the first crate and dependency graph have been established.
-      # Add a separate wasm32-unknown-unknown build and real Firefox integration
-      # job; host tests alone cannot validate browser integration.
+      - name: Unit and black-box integration tests
+        run: cargo test -p cleaner-core --all-targets -- --test-threads=2
+      - name: Executable Rustdoc and documentation lint
+        run: |
+          cargo test -p cleaner-core --doc
+          RUSTDOCFLAGS='-D warnings' cargo doc -p cleaner-core --no-deps
+      - name: Offline security and structural checks
+        run: python3 scripts/static_check.py
+  dependencies:
+    name: Advisory, license and source audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Resolve dependencies
+        run: cargo generate-lockfile
+      - name: Enforce cargo-deny policies
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+        with:
+          command: check
+          arguments: advisories bans licenses sources

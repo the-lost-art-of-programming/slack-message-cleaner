@@ -9,28 +9,34 @@ permissions:
 jobs:
   firefox:
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # pinned
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Install pinned Rust and wasm target
+      - name: Install pinned Rust and WASM target
         run: |
           rustup toolchain install 1.96.0 --profile minimal --component clippy,rustfmt
           rustup target add wasm32-unknown-unknown --toolchain 1.96.0
-      - name: Offline structural checks
+      - name: Verify extension safety invariants
         run: python3 scripts/static_check.py
-      - name: Build dependencies and Rust tests
+      - name: Compile and package Firefox extension
         run: |
           cargo install --locked trunk
-          cargo test -p cleaner-core
           cargo check -p cleaner-ui --target wasm32-unknown-unknown
-      - name: Build Firefox extension with deletion disabled
-        run: python3 scripts/build.py
-      - name: Install Firefox headless test requirements
-        run: |
-          python3 -m pip install selenium --break-system-packages
-          sudo apt-get update
-          sudo apt-get install -y firefox geckodriver
-      - name: Run non-destructive headless Firefox smoke
+          python3 scripts/build.py
+      - name: Install Firefox
+        uses: browser-actions/setup-firefox@0bc507ddf224827e3b1af68e014d5e42ab93e795
+        with:
+          firefox-version: latest-esr
+      - name: Install headless test dependencies
+        run: python3 -m pip install --break-system-packages 'selenium==4.36.0'
+      - name: Headless Firefox install and WASM UI smoke
         run: python3 scripts/firefox_smoke.py
+      - name: Store non-destructive Firefox preview package
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: firefox-preview-${{ github.sha }}
+          path: own-message-cleaner-firefox.zip
+          retention-days: 7
