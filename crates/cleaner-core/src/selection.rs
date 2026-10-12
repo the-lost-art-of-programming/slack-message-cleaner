@@ -207,10 +207,8 @@ mod tests {
         Ok(())
     }
 
-    /// Confirms only an explicitly counted, deduplicated, frozen key set.
-    #[test]
-    fn confirmation_is_deduplicated_and_independent_of_later_review_changes() -> Result<(), Box<dyn std::error::Error>>
-    {
+    /// Prepares a deduplicated selection and verifies repeated IDs are harmless.
+    fn deduplicated_selection_fixture() -> Result<(Selection, Message), IdentityError> {
         let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
         let mut selection = Selection::new(account);
         let first = message("T1", "U1", "1.000001")?;
@@ -230,6 +228,14 @@ mod tests {
             Ok(true),
             "second distinct message must be selected"
         );
+        Ok((selection, first))
+    }
+
+    /// Confirms only an explicitly counted, deduplicated, frozen key set.
+    #[test]
+    fn confirmation_is_deduplicated_and_independent_of_later_review_changes() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let (mut selection, first) = deduplicated_selection_fixture()?;
         assert_eq!(
             selection.confirm(1),
             Err(SelectionError::ConfirmationCountMismatch),
@@ -253,13 +259,8 @@ mod tests {
         Ok(())
     }
 
-    /// An invalid item must not leave a partially selected visible result set.
-    #[test]
-    fn select_all_filtered_is_atomic_and_excludes_hidden_items() -> Result<(), IdentityError> {
-        let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
-        let mut selection = Selection::new(account);
-        let visible = message("T1", "U1", "1.000001")?;
-        let foreign = message("T1", "U2", "1.000002")?;
+    /// Constructs a record from a different conversation to test filtering.
+    fn hidden_conversation_fixture() -> Result<Message, IdentityError> {
         let hidden = Message::new(
             MessageKey::new(
                 WorkspaceId::parse("T1")?,
@@ -271,6 +272,17 @@ mod tests {
             None,
             "hidden".to_owned(),
         );
+        Ok(hidden)
+    }
+
+    /// An invalid item must not leave a partially selected visible result set.
+    #[test]
+    fn select_all_filtered_is_atomic_and_excludes_hidden_items() -> Result<(), IdentityError> {
+        let account = Account::new(WorkspaceId::parse("T1")?, UserId::parse("U1")?);
+        let mut selection = Selection::new(account);
+        let visible = message("T1", "U1", "1.000001")?;
+        let foreign = message("T1", "U2", "1.000002")?;
+        let hidden = hidden_conversation_fixture()?;
         let filter = ReviewFilter {
             kind: Some(ConversationKind::PublicChannel),
             conversation: Some(ConversationId::parse("C1")?),
