@@ -1,7 +1,11 @@
 [advisories]
 unmaintained = "all"
 maximum-db-staleness = "P30D"
-ignore = []
+# RUSTSEC-2024-0436 is a maintenance notice, not an exploitable vulnerability.
+# The Leptos dependency tree currently requires paste. Revisit during upgrades.
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "Transitive Leptos maintenance-only notice; remove when framework upgrades" },
+]
 
 [licenses]
 allow = [
