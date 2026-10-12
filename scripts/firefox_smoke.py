@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,21 +11,10 @@ BUNDLE = ROOT / "own-message-cleaner-firefox.zip"
 EXTENSION_ID = "own-message-cleaner@local.example"
 
 
-def uuid_for(profile: Path) -> str | None:
-    """Read the internal moz-extension UUID from Firefox's local profile prefs."""
-    for filename in ("prefs.js", "user.js"):
-        path = profile / filename
-        if not path.exists():
-            continue
-        for line in path.read_text(errors="replace").splitlines():
-            if not line.startswith('user_pref("extensions.webextensions.uuids", '):
-                continue
-            match = re.search(r',\s*("(?:\\.|[^"\\])*")\);', line)
-            if match is None:
-                continue
-            encoded = json.loads(match.group(1))
-            return json.loads(encoded).get(EXTENSION_ID)
-    return None
+# Pin a UUID before Firefox starts instead of reading a preference file that
+# Firefox may not flush until browser shutdown. This applies ONLY to the
+# throwaway headless test profile, never to end-user installations.
+TEST_UUID = "abf2caa9-d9fe-49eb-94fa-e95efdf583e7"
 
 
 def main() -> int:
@@ -43,16 +31,18 @@ def main() -> int:
         return 2
     options = Options()
     options.add_argument("-headless")
+    options.set_preference(
+        "extensions.webextensions.uuids",
+        json.dumps({EXTENSION_ID: TEST_UUID}),
+    )
     with webdriver.Firefox(options=options) as driver:
         installed = driver.install_addon(str(BUNDLE), temporary=True)
         if installed != EXTENSION_ID:
             raise AssertionError(f"Firefox did not install the expected extension: {installed}")
         print("PASS Firefox installed the extension in headless mode")
-        profile_path = driver.capabilities.get("moz:profile")
-        internal_id = uuid_for(Path(profile_path)) if profile_path else None
-        if not internal_id:
-            raise AssertionError("Unable to resolve extension's internal UUID for the UI smoke test")
-        driver.get(f"moz-extension://{internal_id}/index.html")
+        # A deterministic UUID avoids a race with prefs.js serialization.
+        # Browsing the page verifies the packaged Rust/WASM UI actually mounts.
+        driver.get(f"moz-extension://{TEST_UUID}/index.html")
         heading = WebDriverWait(driver, 20).until(lambda browser: browser.find_element(By.CSS_SELECTOR, "h1"))
         if heading.text != "Own Message Cleaner":
             raise AssertionError(f"Unexpected UI heading: {heading.text}")
