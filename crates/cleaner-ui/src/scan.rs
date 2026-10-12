@@ -24,7 +24,7 @@ use crate::{
 
 /// Stores review and deletion checkpoints under the verified workspace/user pair.
 #[must_use]
-pub fn storage_key(workspace: &str, user: &str) -> String {
+pub(crate) fn storage_key(workspace: &str, user: &str) -> String {
     format!("review_{workspace}_{user}")
 }
 
@@ -230,7 +230,7 @@ async fn checkpoint(data: &WorkspaceData, state: RwSignal<WorkspaceData>) -> Res
 /// Returns errors for canceled, failed, or only partially completed scans.
 /// Incomplete results are retained for individual review but cannot be used
 /// as proof of complete container-wide selection.
-pub async fn scan_conversation(
+pub(crate) async fn scan_conversation(
     token: &str,
     mut data: WorkspaceData,
     channel: &str,
@@ -282,7 +282,7 @@ pub async fn scan_conversation(
 ///
 /// # Errors
 /// Returns an error for interrupted discovery or any incomplete channel.
-pub async fn scan_all(
+pub(crate) async fn scan_all(
     token: &str,
     mut data: WorkspaceData,
     state: RwSignal<WorkspaceData>,

@@ -7,7 +7,7 @@ use web_sys::UrlSearchParams;
 
 /// Supported response failures, deliberately omitting tokens and message content.
 #[derive(Debug)]
-pub enum SlackError {
+pub(crate) enum SlackError {
     /// Network request failed or was blocked.
     Transport,
     /// Response could not be parsed.
@@ -33,7 +33,7 @@ impl std::fmt::Display for SlackError {
 impl std::error::Error for SlackError {}
 
 /// An in-memory authenticated client. Only calls the Slack origin.
-pub struct Slack<'a> {
+pub(crate) struct Slack<'a> {
     /// Browser-captured short-lived credential, never persisted here.
     token: &'a str,
 }
@@ -41,7 +41,7 @@ pub struct Slack<'a> {
 impl<'a> Slack<'a> {
     /// Constructs a client without persisting its session credential.
     #[must_use]
-    pub fn new(token: &'a str) -> Self {
+    pub(crate) fn new(token: &'a str) -> Self {
         Self { token }
     }
 
@@ -49,7 +49,7 @@ impl<'a> Slack<'a> {
     ///
     /// # Errors
     /// Propagates redacted network, parsing and authorization errors.
-    pub async fn call(&self, method: &str, fields: &[(&str, &str)]) -> Result<Value, SlackError> {
+    pub(crate) async fn call(&self, method: &str, fields: &[(&str, &str)]) -> Result<Value, SlackError> {
         let params = UrlSearchParams::new().map_err(|_| SlackError::Transport)?;
         for (key, value) in fields {
             params.append(key, value);
