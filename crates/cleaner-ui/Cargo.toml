@@ -11,7 +11,7 @@ default = []
 live-delete = []
 
 [dependencies]
-cleaner-core = { path = "../cleaner-core" }
+cleaner-core = { version = "0.1.0", path = "../cleaner-core" }
 leptos = { version = "0.8.22", features = ["csr"] }
 wasm-bindgen = "0.2.105"
 wasm-bindgen-futures = "0.4.55"
