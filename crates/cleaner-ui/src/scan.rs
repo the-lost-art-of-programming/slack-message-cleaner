@@ -10,9 +10,13 @@ use std::collections::BTreeSet;
 use leptos::prelude::{GetUntracked, RwSignal, Set};
 use serde_json::Value;
 
-use crate::browser;
-use crate::model::{Conversation, OwnedMessage, ScanStatus, ThreadRecord, WorkspaceData, cursor, parse_conversation, parse_owned};
-use crate::slack::Slack;
+use crate::{
+    browser,
+    model::{
+        Conversation, OwnedMessage, ScanStatus, ThreadRecord, WorkspaceData, cursor, parse_conversation, parse_owned,
+    },
+    slack::Slack,
+};
 
 // ---------------------------------------------------------------------------
 // Workspaces and pagination
@@ -31,13 +35,24 @@ async fn conversations(slack: &Slack<'_>, cancelled: RwSignal<bool>) -> Result<V
     let mut seen = BTreeSet::new();
 
     loop {
-        if cancelled.get_untracked() { return Err("Conversation discovery canceled".to_owned()); }
-        let page = slack.call("conversations.list", &[
-            ("types", "public_channel,private_channel,im,mpim"),
-            ("limit", "200"), ("cursor", &next),
-        ]).await.map_err(|error| error.to_string())?;
+        if cancelled.get_untracked() {
+            return Err("Conversation discovery canceled".to_owned());
+        }
+        let page = slack
+            .call(
+                "conversations.list",
+                &[
+                    ("types", "public_channel,private_channel,im,mpim"),
+                    ("limit", "200"),
+                    ("cursor", &next),
+                ],
+            )
+            .await
+            .map_err(|error| error.to_string())?;
         for raw in page.get("channels").and_then(Value::as_array).into_iter().flatten() {
-            if let Some(channel) = parse_conversation(raw) { all.push(channel); }
+            if let Some(channel) = parse_conversation(raw) {
+                all.push(channel);
+            }
         }
         next = cursor(&page);
         if next.is_empty() {
@@ -65,21 +80,38 @@ struct PageSet {
 
 /// Fetches every cursor page, never interpreting a dangling `has_more` as success.
 async fn pages(
-    slack: &Slack<'_>, method: &str, channel: &str, parent: Option<&str>,
-    user: &str, conversation: &Conversation, cancelled: RwSignal<bool>,
+    slack: &Slack<'_>,
+    method: &str,
+    channel: &str,
+    parent: Option<&str>,
+    user: &str,
+    conversation: &Conversation,
+    cancelled: RwSignal<bool>,
 ) -> Result<PageSet, String> {
-    let mut result = PageSet { messages: Vec::new(), threads: Vec::new() };
+    let mut result = PageSet {
+        messages: Vec::new(),
+        threads: Vec::new(),
+    };
     let mut next = String::new();
     let mut seen = BTreeSet::new();
 
     loop {
-        if cancelled.get_untracked() { return Err("Message discovery canceled".to_owned()); }
+        if cancelled.get_untracked() {
+            return Err("Message discovery canceled".to_owned());
+        }
         let response = if let Some(root) = parent {
-            slack.call(method, &[("channel", channel), ("ts", root), ("limit", "200"), ("cursor", &next)])
-                .await.map_err(|error| error.to_string())?
+            slack
+                .call(
+                    method,
+                    &[("channel", channel), ("ts", root), ("limit", "200"), ("cursor", &next)],
+                )
+                .await
+                .map_err(|error| error.to_string())?
         } else {
-            slack.call(method, &[("channel", channel), ("limit", "200"), ("cursor", &next)])
-                .await.map_err(|error| error.to_string())?
+            slack
+                .call(method, &[("channel", channel), ("limit", "200"), ("cursor", &next)])
+                .await
+                .map_err(|error| error.to_string())?
         };
         for raw in response.get("messages").and_then(Value::as_array).into_iter().flatten() {
             if parent.is_none() {
@@ -87,15 +119,19 @@ async fn pages(
                 if replies > 0 {
                     if let Some(timestamp) = raw.get("ts").and_then(Value::as_str) {
                         result.threads.push(ThreadRecord {
-                            channel: conversation.id.clone(), root: timestamp.to_owned(),
-                            reply_count: replies, status: ScanStatus::Pending,
+                            channel: conversation.id.clone(),
+                            root: timestamp.to_owned(),
+                            reply_count: replies,
+                            status: ScanStatus::Pending,
                         });
                     }
                 }
             }
             if let Some(mut message) = parse_owned(raw, conversation, user) {
                 if let Some(root) = parent {
-                    if message.timestamp == root { continue; }
+                    if message.timestamp == root {
+                        continue;
+                    }
                     message.parent = Some(root.to_owned());
                 }
                 result.messages.push(message);
@@ -108,7 +144,9 @@ async fn pages(
             }
             break;
         }
-        if !seen.insert(next.clone()) { return Err("Slack returned a repeated message cursor".to_owned()); }
+        if !seen.insert(next.clone()) {
+            return Err("Slack returned a repeated message cursor".to_owned());
+        }
     }
     Ok(result)
 }
@@ -129,28 +167,51 @@ struct ConversationScan {
 
 /// Scans all history, then every thread, retaining successful work on errors.
 async fn scan_one(
-    slack: &Slack<'_>, conversation: &Conversation, user: &str, cancelled: RwSignal<bool>,
+    slack: &Slack<'_>,
+    conversation: &Conversation,
+    user: &str,
+    cancelled: RwSignal<bool>,
 ) -> Result<ConversationScan, String> {
-    let history = pages(slack, "conversations.history", &conversation.id,
-        None, user, conversation, cancelled).await?;
+    let history = pages(
+        slack,
+        "conversations.history",
+        &conversation.id,
+        None,
+        user,
+        conversation,
+        cancelled,
+    )
+    .await?;
     let mut scan = ConversationScan {
-        messages: history.messages, threads: history.threads, errors: Vec::new(),
+        messages: history.messages,
+        threads: history.threads,
+        errors: Vec::new(),
     };
     for thread in &mut scan.threads {
         if cancelled.get_untracked() {
-            scan.errors.push("Stopped before every reply thread was read".to_owned());
+            scan.errors
+                .push("Stopped before every reply thread was read".to_owned());
             break;
         }
-        match pages(slack, "conversations.replies", &conversation.id,
-            Some(&thread.root), user, conversation, cancelled).await {
+        match pages(
+            slack,
+            "conversations.replies",
+            &conversation.id,
+            Some(&thread.root),
+            user,
+            conversation,
+            cancelled,
+        )
+        .await
+        {
             Ok(replies) => {
                 scan.messages.extend(replies.messages);
                 thread.status = ScanStatus::Complete;
-            }
+            },
             Err(error) => {
                 thread.status = ScanStatus::Partial;
                 scan.errors.push(format!("Thread {}: {error}", thread.root));
-            }
+            },
         }
     }
     Ok(scan)
@@ -170,11 +231,19 @@ async fn checkpoint(data: &WorkspaceData, state: RwSignal<WorkspaceData>) -> Res
 /// Incomplete results are retained for individual review but cannot be used
 /// as proof of complete container-wide selection.
 pub async fn scan_conversation(
-    token: &str, mut data: WorkspaceData, channel: &str,
-    state: RwSignal<WorkspaceData>, status: RwSignal<String>, cancelled: RwSignal<bool>,
+    token: &str,
+    mut data: WorkspaceData,
+    channel: &str,
+    state: RwSignal<WorkspaceData>,
+    status: RwSignal<String>,
+    cancelled: RwSignal<bool>,
 ) -> Result<(), String> {
-    let item = data.conversations.iter().find(|entry| entry.id == channel)
-        .cloned().ok_or("Conversation was not discovered in this workspace")?;
+    let item = data
+        .conversations
+        .iter()
+        .find(|entry| entry.id == channel)
+        .cloned()
+        .ok_or("Conversation was not discovered in this workspace")?;
     let slack = Slack::new(token);
     data.coverage.insert(item.id.clone(), ScanStatus::Scanning);
     data.scan_complete = false;
@@ -198,12 +267,12 @@ pub async fn scan_conversation(
                 status.set(error.clone());
                 Err(error)
             }
-        }
+        },
         Err(error) => {
             data.coverage.insert(item.id.clone(), ScanStatus::Partial);
             status.set(format!("Incomplete scan of {}: {error}", item.label));
             Err(error)
-        }
+        },
     };
     checkpoint(&data, state).await?;
     result
@@ -214,8 +283,11 @@ pub async fn scan_conversation(
 /// # Errors
 /// Returns an error for interrupted discovery or any incomplete channel.
 pub async fn scan_all(
-    token: &str, mut data: WorkspaceData, state: RwSignal<WorkspaceData>,
-    status: RwSignal<String>, cancelled: RwSignal<bool>,
+    token: &str,
+    mut data: WorkspaceData,
+    state: RwSignal<WorkspaceData>,
+    status: RwSignal<String>,
+    cancelled: RwSignal<bool>,
 ) -> Result<(), String> {
     let slack = Slack::new(token);
     status.set("Listing accessible Slack conversations…".to_owned());
@@ -232,23 +304,37 @@ pub async fn scan_all(
         if cancelled.get_untracked() {
             return Err("Scan canceled. Completed conversations remain saved.".to_owned());
         }
-        status.set(format!("Conversation {} / {}: {}",
-            index.saturating_add(1), list.len(), conversation.label));
+        status.set(format!(
+            "Conversation {} / {}: {}",
+            index.saturating_add(1),
+            list.len(),
+            conversation.label
+        ));
         let current = state.get_untracked();
         if let Err(error) = scan_conversation(token, current, &conversation.id, state, status, cancelled).await {
             failures.push(error);
         }
     }
     let mut current = state.get_untracked();
-    current.scan_complete = failures.is_empty() && current.conversations.iter()
-        .all(|item| current.conversation_complete(&item.id));
+    current.scan_complete = failures.is_empty()
+        && current
+            .conversations
+            .iter()
+            .all(|item| current.conversation_complete(&item.id));
     checkpoint(&current, state).await?;
     if failures.is_empty() {
-        status.set(format!("Workspace scan complete: {} own messages, {} conversations, {} threads.",
-            current.messages.len(), current.conversations.len(), current.threads.len()));
+        status.set(format!(
+            "Workspace scan complete: {} own messages, {} conversations, {} threads.",
+            current.messages.len(),
+            current.conversations.len(),
+            current.threads.len()
+        ));
         Ok(())
     } else {
-        let summary = format!("Incomplete workspace scan: {} conversations require review.", failures.len());
+        let summary = format!(
+            "Incomplete workspace scan: {} conversations require review.",
+            failures.len()
+        );
         status.set(summary.clone());
         Err(summary)
     }

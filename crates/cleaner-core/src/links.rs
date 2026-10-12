@@ -15,8 +15,7 @@ use crate::identity::{ConversationId, MessageTs, WorkspaceId};
 /// # Examples
 ///
 /// ```
-/// use cleaner_core::identity::WorkspaceId;
-/// use cleaner_core::links::workspace_url;
+/// use cleaner_core::{identity::WorkspaceId, links::workspace_url};
 /// let team = WorkspaceId::parse("T123")?;
 /// assert_eq!(workspace_url(&team), "https://app.slack.com/client/T123");
 /// # Ok::<(), cleaner_core::identity::IdentityError>(())
@@ -31,11 +30,16 @@ pub fn workspace_url(team: &WorkspaceId) -> String {
 /// # Examples
 ///
 /// ```
-/// use cleaner_core::identity::{ConversationId, WorkspaceId};
-/// use cleaner_core::links::conversation_url;
+/// use cleaner_core::{
+///     identity::{ConversationId, WorkspaceId},
+///     links::conversation_url,
+/// };
 /// let team = WorkspaceId::parse("T123")?;
 /// let channel = ConversationId::parse("D456")?;
-/// assert_eq!(conversation_url(&team, &channel), "https://app.slack.com/client/T123/D456");
+/// assert_eq!(
+///     conversation_url(&team, &channel),
+///     "https://app.slack.com/client/T123/D456"
+/// );
 /// # Ok::<(), cleaner_core::identity::IdentityError>(())
 /// ```
 #[must_use]
@@ -56,17 +60,21 @@ pub fn conversation_url(team: &WorkspaceId, conversation: &ConversationId) -> St
 /// # Examples
 ///
 /// ```
-/// use cleaner_core::identity::{ConversationId, MessageTs};
-/// use cleaner_core::links::permalink_is_for;
+/// use cleaner_core::{
+///     identity::{ConversationId, MessageTs},
+///     links::permalink_is_for,
+/// };
 /// let conversation = ConversationId::parse("C123")?;
 /// let timestamp = MessageTs::parse("12345.000006")?;
 /// assert!(permalink_is_for(
 ///     "https://example.slack.com/archives/C123/p12345000006?thread_ts=12344.000001&cid=C123",
-///     &conversation, &timestamp
+///     &conversation,
+///     &timestamp
 /// ));
 /// assert!(!permalink_is_for(
 ///     "https://example.slack.com.evil.invalid/archives/C123/p12345000006",
-///     &conversation, &timestamp
+///     &conversation,
+///     &timestamp
 /// ));
 /// # Ok::<(), cleaner_core::identity::IdentityError>(())
 /// ```
@@ -85,7 +93,11 @@ pub fn permalink_is_for(url: &str, conversation: &ConversationId, timestamp: &Me
         return false;
     }
 
-    let expected = format!("archives/{}/p{}", conversation.as_str(), timestamp.as_str().replace('.', ""));
+    let expected = format!(
+        "archives/{}/p{}",
+        conversation.as_str(),
+        timestamp.as_str().replace('.', "")
+    );
     let actual = path.split_once('?').map_or(path, |(pathname, _)| pathname);
     actual == expected
 }
@@ -116,7 +128,11 @@ mod tests {
     fn only_exact_slack_messages_can_open() -> Result<(), IdentityError> {
         let channel = ConversationId::parse("C1")?;
         let ts = MessageTs::parse("1.000001")?;
-        assert!(permalink_is_for("https://acme.slack.com/archives/C1/p1000001", &channel, &ts));
+        assert!(permalink_is_for(
+            "https://acme.slack.com/archives/C1/p1000001",
+            &channel,
+            &ts
+        ));
         for rejected in [
             "http://acme.slack.com/archives/C1/p1000001",
             "https://acme.slack.com.evil.com/archives/C1/p1000001",

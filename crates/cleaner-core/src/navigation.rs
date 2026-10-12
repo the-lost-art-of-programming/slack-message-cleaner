@@ -5,8 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::identity::{ConversationId, MessageTs};
-use crate::message::Message;
+use crate::{
+    identity::{ConversationId, MessageTs},
+    message::Message,
+};
 
 // ---------------------------------------------------------------------------
 // Review scopes
@@ -37,15 +39,24 @@ impl MessageScope {
     /// # Examples
     ///
     /// ```
-    /// use cleaner_core::identity::{ConversationId, MessageKey, MessageTs, UserId, WorkspaceId};
-    /// use cleaner_core::message::{ConversationKind, Message};
-    /// use cleaner_core::navigation::MessageScope;
+    /// use cleaner_core::{
+    ///     identity::{ConversationId, MessageKey, MessageTs, UserId, WorkspaceId},
+    ///     message::{ConversationKind, Message},
+    ///     navigation::MessageScope,
+    /// };
     ///
     /// let conversation = ConversationId::parse("C123")?;
     /// let root = MessageTs::parse("100.000001")?;
     /// let reply = Message::new(
-    ///     MessageKey::new(WorkspaceId::parse("T1")?, conversation.clone(), MessageTs::parse("101.000002")?),
-    ///     UserId::parse("U1")?, ConversationKind::PublicChannel, Some(root.clone()), String::new()
+    ///     MessageKey::new(
+    ///         WorkspaceId::parse("T1")?,
+    ///         conversation.clone(),
+    ///         MessageTs::parse("101.000002")?,
+    ///     ),
+    ///     UserId::parse("U1")?,
+    ///     ConversationKind::PublicChannel,
+    ///     Some(root.clone()),
+    ///     String::new(),
     /// );
     /// let scope = MessageScope::Thread { conversation, root };
     /// assert!(scope.contains(&reply));
@@ -59,7 +70,7 @@ impl MessageScope {
             Self::Thread { conversation, root } => {
                 message.key().conversation() == conversation
                     && (message.key().timestamp() == root || message.thread_parent() == Some(root))
-            }
+            },
         }
     }
 }
@@ -71,23 +82,31 @@ impl MessageScope {
 #[cfg(test)]
 mod tests {
     use super::MessageScope;
-    use crate::identity::{ConversationId, IdentityError, MessageKey, MessageTs, UserId, WorkspaceId};
-    use crate::message::{ConversationKind, Message};
+    use crate::{
+        identity::{ConversationId, IdentityError, MessageKey, MessageTs, UserId, WorkspaceId},
+        message::{ConversationKind, Message},
+    };
 
     fn fixture(channel: &str, timestamp: &str, parent: Option<&str>) -> Result<Message, IdentityError> {
         let parent = parent.map(MessageTs::parse).transpose()?;
         Ok(Message::new(
             MessageKey::new(
-                WorkspaceId::parse("T1")?, ConversationId::parse(channel)?, MessageTs::parse(timestamp)?
+                WorkspaceId::parse("T1")?,
+                ConversationId::parse(channel)?,
+                MessageTs::parse(timestamp)?,
             ),
-            UserId::parse("U1")?, ConversationKind::PublicChannel, parent, String::new(),
+            UserId::parse("U1")?,
+            ConversationKind::PublicChannel,
+            parent,
+            String::new(),
         ))
     }
 
     #[test]
     fn thread_scope_includes_root_and_replies_but_not_neighbor_threads() -> Result<(), IdentityError> {
         let scope = MessageScope::Thread {
-            conversation: ConversationId::parse("C1")?, root: MessageTs::parse("10.000001")?,
+            conversation: ConversationId::parse("C1")?,
+            root: MessageTs::parse("10.000001")?,
         };
         assert!(scope.contains(&fixture("C1", "10.000001", None)?));
         assert!(scope.contains(&fixture("C1", "11.000001", Some("10.000001"))?));

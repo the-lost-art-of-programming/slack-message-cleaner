@@ -41,7 +41,9 @@ pub struct Slack<'a> {
 impl<'a> Slack<'a> {
     /// Constructs a client without persisting its session credential.
     #[must_use]
-    pub fn new(token: &'a str) -> Self { Self { token } }
+    pub fn new(token: &'a str) -> Self {
+        Self { token }
+    }
 
     /// Calls the selected Slack API endpoint using the authenticated browser session.
     ///
@@ -49,24 +51,38 @@ impl<'a> Slack<'a> {
     /// Propagates redacted network, parsing and authorization errors.
     pub async fn call(&self, method: &str, fields: &[(&str, &str)]) -> Result<Value, SlackError> {
         let params = UrlSearchParams::new().map_err(|_| SlackError::Transport)?;
-        for (key, value) in fields { params.append(key, value); }
+        for (key, value) in fields {
+            params.append(key, value);
+        }
         let body = params.to_string().as_string().ok_or(SlackError::Transport)?;
         let url = format!("https://slack.com/api/{method}");
         for attempt in 0..3_u32 {
             let request = Request::post(&url)
                 .header("Authorization", &format!("Bearer {}", self.token))
                 .header("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
-                .body(body.clone()).map_err(|_| SlackError::Transport)?;
+                .body(body.clone())
+                .map_err(|_| SlackError::Transport)?;
             let response = request.send().await.map_err(|_| SlackError::Transport)?;
             if response.status() == 429 {
-                let seconds = response.headers().get("retry-after")
-                    .and_then(|value| value.parse::<u32>().ok()).unwrap_or(3).clamp(1, 30);
+                let seconds = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or(3)
+                    .clamp(1, 30);
                 TimeoutFuture::new(seconds.saturating_mul(1000)).await;
-                if attempt == 2 { return Err(SlackError::RateLimited); }
+                if attempt == 2 {
+                    return Err(SlackError::RateLimited);
+                }
                 continue;
             }
-            if !response.ok() { return Err(SlackError::Api(format!("http_{}", response.status()))); }
-            let data = response.json::<Value>().await.map_err(|_| SlackError::InvalidResponse)?;
+            if !response.ok() {
+                return Err(SlackError::Api(format!("http_{}", response.status())));
+            }
+            let data = response
+                .json::<Value>()
+                .await
+                .map_err(|_| SlackError::InvalidResponse)?;
             if data.get("ok").and_then(Value::as_bool) != Some(true) {
                 let code = data.get("error").and_then(Value::as_str).unwrap_or("unknown_error");
                 return Err(SlackError::Api(code.chars().take(100).collect()));
