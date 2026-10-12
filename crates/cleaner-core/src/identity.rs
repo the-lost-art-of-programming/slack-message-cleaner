@@ -39,6 +39,19 @@ pub struct WorkspaceId(String);
 impl WorkspaceId {
     /// Validates and preserves an opaque Slack workspace identifier.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cleaner_core::identity::WorkspaceId;
+    /// # fn main() -> Result<(), cleaner_core::identity::IdentityError> {
+    /// let team = WorkspaceId::parse("T123")?;
+    /// assert_eq!(team.as_str(), "T123", "valid identity must round-trip exactly");
+    /// assert!(WorkspaceId::parse("invalid whitespace").is_err(), "whitespace must fail");
+    /// # Ok(())
+    /// # }
+    /// ```
+
+    ///
     /// # Errors
     /// Returns an error if required IDs, account ownership or a queue transition are invalid.
     pub fn parse(raw: &str) -> Result<Self, IdentityError> {
@@ -98,6 +111,19 @@ pub struct MessageTs(String);
 
 impl MessageTs {
     /// Accepts `seconds.fraction` without floating point conversion or rounding.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cleaner_core::identity::MessageTs;
+    /// # fn main() -> Result<(), cleaner_core::identity::IdentityError> {
+    /// let ts = MessageTs::parse("1712345678.000001")?;
+    /// assert_eq!(ts.as_str(), "1712345678.000001", "fractional precision is preserved");
+    /// assert!(MessageTs::parse("1712345678").is_err(), "missing fraction must fail");
+    /// # Ok(())
+    /// # }
+    /// ```
+
     ///
     /// # Errors
     /// Returns an error if required IDs, account ownership or a queue transition are invalid.
