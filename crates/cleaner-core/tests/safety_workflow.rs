@@ -67,6 +67,11 @@ mod tests {
         })
     }
 
+    /// Asserts that an acknowledged skip remains terminal after checkpointing.
+    fn assert_known_skipped_result(queue: &DeletionQueue, key: &MessageKey) {
+        assert_eq!(queue.state(key), Some(ItemState::Skipped), "known outcomes are preserved");
+    }
+
     // ---------------------------------------------------------------------------
     // Safety contracts
     // ---------------------------------------------------------------------------
@@ -129,11 +134,7 @@ mod tests {
         );
         recovered.start(&second_key)?;
         recovered.record_outcome(&second_key, AttemptOutcome::Skipped)?;
-        assert_eq!(
-            recovered.state(&second_key),
-            Some(ItemState::Skipped),
-            "known outcomes are preserved"
-        );
+        assert_known_skipped_result(&recovered, &second_key);
         Ok(())
     }
 }
