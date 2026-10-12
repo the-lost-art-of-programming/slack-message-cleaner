@@ -40,8 +40,8 @@ class PackagingChecks(unittest.TestCase):
         self.assertIn("queue.start(&key)", runner)
         self.assertLess(runner.index("queue.start(&key)"), runner.index("let outcome = attempt"))
         self.assertIn("checkpoint(&data, state).await?;", runner)
-        self.assertIn('slack.call("conversations.replies"', runner)
-        self.assertIn('slack.call("chat.delete"', runner)
+        self.assertRegex(runner, r'slack\s*\.\s*call\s*\(\s*"conversations\.replies"')
+        self.assertRegex(runner, r'slack\s*\.\s*call\s*\(\s*"chat\.delete"')
 
     def test_tokens_are_never_saved_to_local_storage(self):
         browser = (ROOT / "crates/cleaner-ui/src/browser.rs").read_text()
