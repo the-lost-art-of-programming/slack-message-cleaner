@@ -21,7 +21,7 @@ ARCHIVE = ROOT / "own-message-cleaner-firefox.zip"
 # Trunk generates an inline module script by default. Firefox MV3 forbids
 # inline extension scripts, even though generated JavaScript files are allowed.
 # Move the exact emitted module body to a local file without authoring JS.
-_TRUNK_MODULE = re.compile(r'<script\\s+type="module"\\s*>(.*?)</script>', re.DOTALL)
+_TRUNK_MODULE = re.compile(r'<script\s+type="module"\s*>(.*?)</script>', re.DOTALL)
 
 
 def externalize_trunk_bootstrap(directory: Path) -> None:
@@ -48,14 +48,14 @@ def externalize_trunk_bootstrap(directory: Path) -> None:
         raise ValueError("Unrecognized Trunk-generated WASM bootstrap")
 
     bootstrap_name = "trunk-bootstrap.js"
-    (directory / bootstrap_name).write_text(generated_source + "\\n", encoding="utf-8")
+    (directory / bootstrap_name).write_text(generated_source + "\n", encoding="utf-8")
 
     external = f'<script type="module" src="/{bootstrap_name}"></script>'
     updated = html[: matches[0].start()] + external + html[matches[0].end() :]
 
     # Prevent regressions if Trunk starts emitting additional inline scripts.
-    opening_scripts = re.findall(r"<script\\b[^>]*>", updated, re.IGNORECASE)
-    if any(re.search(r"\\bsrc\\s*=", tag, re.IGNORECASE) is None for tag in opening_scripts):
+    opening_scripts = re.findall(r"<script\b[^>]*>", updated, re.IGNORECASE)
+    if any(re.search(r"\bsrc\s*=", tag, re.IGNORECASE) is None for tag in opening_scripts):
         raise ValueError("Inline scripts are forbidden by Firefox MV3 CSP")
 
     html_path.write_text(updated, encoding="utf-8")
