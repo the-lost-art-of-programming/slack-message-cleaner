@@ -7,6 +7,8 @@
 #![forbid(unsafe_code)]
 
 pub mod identity;
+pub mod links;
 pub mod message;
+pub mod navigation;
 pub mod queue;
 pub mod selection;

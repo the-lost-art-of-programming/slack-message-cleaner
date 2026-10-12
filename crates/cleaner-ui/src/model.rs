@@ -2,44 +2,76 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use cleaner_core::{
-    identity::{Account, ConversationId, MessageKey, MessageTs, UserId, WorkspaceId},
-    message::{ConversationKind, Message},
-    queue::{DeletionQueue, ItemState},
-    selection::Selection,
-};
+use cleaner_core::identity::{Account, ConversationId, MessageKey, MessageTs, UserId, WorkspaceId};
+use cleaner_core::message::{ConversationKind, Message};
+use cleaner_core::queue::{DeletionQueue, ItemState};
+use cleaner_core::selection::Selection;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Schema generation of local data, upgraded only by explicit migration.
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 
 /// Minimal navigable conversation metadata.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct Conversation {
+pub struct Conversation {
     /// Stable Slack conversation identifier.
-    pub(crate) id: String,
+    pub id: String,
     /// A human-readable Slack name or safe ID fallback.
-    pub(crate) label: String,
+    pub label: String,
     /// Public channel, private channel, DM, or group DM.
-    pub(crate) kind: ConversationKind,
+    pub kind: ConversationKind,
+}
+
+// ---------------------------------------------------------------------------
+// Conversation and thread coverage
+// ---------------------------------------------------------------------------
+
+/// Coverage of a container's paginated Slack history and its reply pages.
+///
+/// Only `Complete` grants container-wide Select All. A saved `Scanning`
+/// checkpoint is treated as incomplete on restart, never as completed work.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+pub enum ScanStatus {
+    /// No successful scan has been performed.
+    #[default]
+    Pending,
+    /// A scan began but no complete snapshot has been committed.
+    Scanning,
+    /// Every discoverable history and reply page was consumed successfully.
+    Complete,
+    /// One or more pages failed, were restricted, or were interrupted.
+    Partial,
+}
+
+/// One thread root, even if its author is not the signed-in user.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ThreadRecord {
+    /// Conversation owning the thread.
+    pub channel: String,
+    /// Exact Slack parent timestamp used for navigation and scanning.
+    pub root: String,
+    /// Slack's last-reported number of replies, not our own-message count.
+    pub reply_count: u64,
+    /// Thread-specific coverage; `Complete` allows thread-wide selection.
+    pub status: ScanStatus,
 }
 
 /// User-owned message, with enough metadata to recheck ownership before deletion.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct OwnedMessage {
+pub struct OwnedMessage {
     /// Stable Slack channel or DM identifier.
-    pub(crate) channel: String,
+    pub channel: String,
     /// Exact timestamp preserving fractional digits.
-    pub(crate) timestamp: String,
+    pub timestamp: String,
     /// Thread root only when this message is a reply.
-    pub(crate) parent: Option<String>,
+    pub parent: Option<String>,
     /// Conversation classification for local filtering.
-    pub(crate) kind: ConversationKind,
+    pub kind: ConversationKind,
     /// Bounded review-only preview.
-    pub(crate) preview: String,
+    pub preview: String,
     /// Conversation name or ID captured at discovery time.
-    pub(crate) conversation_label: String,
+    pub conversation_label: String,
 }
 
 impl OwnedMessage {
@@ -47,97 +79,120 @@ impl OwnedMessage {
     ///
     /// # Errors
     /// Rejects malformed IDs or timestamps instead of queuing them for deletion.
-    pub(crate) fn domain(&self, workspace: &str, author: &str) -> Result<Message, String> {
+    pub fn domain(&self, workspace: &str, author: &str) -> Result<Message, String> {
         let workspace_id = WorkspaceId::parse(workspace).map_err(|error| error.to_string())?;
         let channel_id = ConversationId::parse(&self.channel).map_err(|error| error.to_string())?;
         let timestamp = MessageTs::parse(&self.timestamp).map_err(|error| error.to_string())?;
         let user = UserId::parse(author).map_err(|error| error.to_string())?;
-        let parent = self
-            .parent
-            .as_deref()
-            .map(MessageTs::parse)
-            .transpose()
-            .map_err(|error| error.to_string())?;
-        Ok(Message::new(
-            MessageKey::new(workspace_id, channel_id, timestamp),
-            user,
-            self.kind,
-            parent,
-            self.preview.clone(),
-        ))
+        let parent = self.parent.as_deref().map(MessageTs::parse)
+            .transpose().map_err(|error| error.to_string())?;
+        Ok(Message::new(MessageKey::new(workspace_id, channel_id, timestamp), user,
+            self.kind, parent, self.preview.clone()))
     }
 
     /// Stable key for local review selection and status presentation.
     #[must_use]
-    pub(crate) fn identifier(&self) -> String {
+    pub fn identifier(&self) -> String {
         format!("{}:{}", self.channel, self.timestamp)
     }
 }
 
 /// Persisted state of one reviewed item in a confirmed job.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct JobEntry {
+pub struct JobEntry {
     /// Immutable approved message snapshot.
-    pub(crate) message: OwnedMessage,
+    pub message: OwnedMessage,
     /// Recorded attempt outcome, never marked successful without Slack acknowledgment.
-    pub(crate) status: ItemState,
+    pub status: ItemState,
 }
 
 /// A user-approved, manually resumed, account-bound deletion batch.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct SavedJob {
+pub struct SavedJob {
     /// Exact number confirmed, redundant for checkpoint integrity.
-    pub(crate) confirmed_count: usize,
+    pub confirmed_count: usize,
     /// Snapshot of individually selected IDs and per-item attempt state.
-    pub(crate) entries: Vec<JobEntry>,
+    pub entries: Vec<JobEntry>,
 }
 
 /// Saved data for one exact Slack workspace and user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub(crate) struct WorkspaceData {
+pub struct WorkspaceData {
     /// Current JSON data schema version.
-    pub(crate) schema: u32,
+    pub schema: u32,
     /// Authenticated Slack team ID.
-    pub(crate) workspace: String,
+    pub workspace: String,
     /// Authenticated Slack user ID.
-    pub(crate) user: String,
+    pub user: String,
     /// Navigation items retained locally.
-    pub(crate) conversations: Vec<Conversation>,
+    pub conversations: Vec<Conversation>,
+    /// Per-conversation coverage; absent entries are assumed incomplete.
+    #[serde(default)]
+    pub coverage: BTreeMap<String, ScanStatus>,
+    /// Thread roots discovered from history, including non-owned parents.
+    #[serde(default)]
+    pub threads: Vec<ThreadRecord>,
     /// Own-message snapshots retained locally for review, not credentials.
-    pub(crate) messages: Vec<OwnedMessage>,
+    pub messages: Vec<OwnedMessage>,
     /// A confirmed deletion queue, if one exists.
-    pub(crate) job: Option<SavedJob>,
+    pub job: Option<SavedJob>,
     /// True only if all conversations and pages were scanned successfully.
-    pub(crate) scan_complete: bool,
+    pub scan_complete: bool,
 }
 
 impl WorkspaceData {
     /// Initializes review data without assuming successful discovery.
     #[must_use]
-    pub(crate) fn new(workspace: String, user: String) -> Self {
-        Self {
-            schema: SCHEMA_VERSION,
-            workspace,
-            user,
-            conversations: Vec::new(),
-            messages: Vec::new(),
-            job: None,
-            scan_complete: false,
+    pub fn new(workspace: String, user: String) -> Self {
+        Self { schema: SCHEMA_VERSION, workspace, user,
+            conversations: Vec::new(), coverage: BTreeMap::new(), threads: Vec::new(),
+            messages: Vec::new(), job: None, scan_complete: false }
+    }
+
+    /// Migrates legacy review state conservatively without granting coverage.
+    ///
+    /// Already selected message IDs remain intact, but no historic scan can
+    /// claim new per-container completeness without being run again.
+    ///
+    /// # Errors
+    /// Rejects future schema versions rather than silently downgrading them.
+    pub fn migrate_legacy(&mut self) -> Result<(), String> {
+        if self.schema > SCHEMA_VERSION {
+            return Err("Saved review state uses a newer schema".to_owned());
         }
+        if self.schema < SCHEMA_VERSION {
+            self.schema = SCHEMA_VERSION;
+            self.coverage.clear();
+            self.threads.clear();
+            self.scan_complete = false;
+        }
+        Ok(())
+    }
+
+    /// Whether an entire workspace, conversation or thread is review-complete.
+    #[must_use]
+    pub fn conversation_complete(&self, conversation: &str) -> bool {
+        self.coverage.get(conversation) == Some(&ScanStatus::Complete)
+    }
+
+    /// Verifies a thread scan independently of its parent channel coverage.
+    #[must_use]
+    pub fn thread_complete(&self, conversation: &str, root: &str) -> bool {
+        self.conversation_complete(conversation)
+            && self.threads.iter().any(|thread| thread.channel == conversation
+                && thread.root == root && thread.status == ScanStatus::Complete)
     }
 
     /// Restores a saved batch using the pure domain selection and queue checks.
     ///
     /// # Errors
     /// Fails closed on account mismatch, duplicate entries, corrupt counts or IDs.
-    pub(crate) fn verified_queue(&self, job: &SavedJob) -> Result<DeletionQueue, String> {
+    pub fn verified_queue(&self, job: &SavedJob) -> Result<DeletionQueue, String> {
         if self.schema != SCHEMA_VERSION || job.entries.len() != job.confirmed_count {
             return Err("Incompatible or inconsistent deletion checkpoint".to_owned());
         }
-        let account = Account::new(
-            WorkspaceId::parse(&self.workspace).map_err(|e| e.to_string())?,
-            UserId::parse(&self.user).map_err(|e| e.to_string())?,
-        );
+        let account = Account::new(WorkspaceId::parse(&self.workspace).map_err(|e| e.to_string())?,
+            UserId::parse(&self.user).map_err(|e| e.to_string())?);
         let mut selection = Selection::new(account);
         let mut statuses = BTreeMap::new();
         for entry in &job.entries {
@@ -153,7 +208,7 @@ impl WorkspaceData {
     }
 
     /// Appends discovered messages by stable key without inflating counts.
-    pub(crate) fn merge_messages(&mut self, incoming: Vec<OwnedMessage>) {
+    pub fn merge_messages(&mut self, incoming: Vec<OwnedMessage>) {
         let mut existing: BTreeSet<String> = self.messages.iter().map(OwnedMessage::identifier).collect();
         for message in incoming {
             if existing.insert(message.identifier()) {
@@ -164,7 +219,7 @@ impl WorkspaceData {
 }
 
 /// Converts a Slack conversation into the smallest necessary navigation record.
-pub(crate) fn parse_conversation(raw: &Value) -> Option<Conversation> {
+pub fn parse_conversation(raw: &Value) -> Option<Conversation> {
     let id = raw.get("id")?.as_str()?.to_owned();
     ConversationId::parse(&id).ok()?;
     let kind = if raw.get("is_im").and_then(Value::as_bool).unwrap_or(false) {
@@ -176,19 +231,14 @@ pub(crate) fn parse_conversation(raw: &Value) -> Option<Conversation> {
     } else {
         ConversationKind::PublicChannel
     };
-    let label = raw
-        .get("name")
-        .and_then(Value::as_str)
+    let label = raw.get("name").and_then(Value::as_str)
         .or_else(|| raw.get("user").and_then(Value::as_str))
-        .unwrap_or(&id)
-        .chars()
-        .take(150)
-        .collect();
+        .unwrap_or(&id).chars().take(150).collect();
     Some(Conversation { id, label, kind })
 }
 
 /// Parses only supported, explicitly user-authored Slack message types.
-pub(crate) fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &str) -> Option<OwnedMessage> {
+pub fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &str) -> Option<OwnedMessage> {
     if raw.get("user")?.as_str()? != user_id {
         return None;
     }
@@ -198,69 +248,41 @@ pub(crate) fn parse_owned(raw: &Value, conversation: &Conversation, user_id: &st
     }
     let timestamp = raw.get("ts")?.as_str()?.to_owned();
     MessageTs::parse(&timestamp).ok()?;
-    let parent = raw
-        .get("thread_ts")
-        .and_then(Value::as_str)
+    let parent = raw.get("thread_ts").and_then(Value::as_str)
         .filter(|parent| *parent != timestamp.as_str())
         .map(str::to_owned);
     if parent.as_deref().is_some_and(|value| MessageTs::parse(value).is_err()) {
         return None;
     }
-    let preview = raw
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or("[Non-text message]")
-        .chars()
-        .take(280)
-        .collect();
-    Some(OwnedMessage {
-        channel: conversation.id.clone(),
-        timestamp,
-        parent,
-        kind: conversation.kind,
-        conversation_label: conversation.label.clone(),
-        preview,
-    })
+    let preview = raw.get("text").and_then(Value::as_str).unwrap_or("[Non-text message]")
+        .chars().take(280).collect();
+    Some(OwnedMessage { channel: conversation.id.clone(), timestamp, parent,
+        kind: conversation.kind, conversation_label: conversation.label.clone(), preview })
 }
 
 /// Extracts the next pagination cursor, treating its absence as completion.
 #[must_use]
-pub(crate) fn cursor(value: &Value) -> String {
-    value
-        .pointer("/response_metadata/next_cursor")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_owned()
+pub fn cursor(value: &Value) -> String {
+    value.pointer("/response_metadata/next_cursor").and_then(Value::as_str)
+        .unwrap_or("").to_owned()
 }
 
 #[cfg(test)]
 mod tests {
-    use cleaner_core::{message::ConversationKind, queue::ItemState};
     use serde_json::json;
-
     use super::{Conversation, OwnedMessage, WorkspaceData, parse_conversation, parse_owned};
+    use cleaner_core::message::ConversationKind;
+    use cleaner_core::queue::ItemState;
 
     /// Rejects other users and unsupported system message types.
     #[test]
     fn discovery_rejects_foreign_authors_and_system_events() {
-        let conversation = Conversation {
-            id: "C1".to_owned(),
-            label: "general".to_owned(),
-            kind: ConversationKind::PublicChannel,
-        };
-        assert!(
-            parse_owned(&json!({"user":"U2","ts":"1.000001"}), &conversation, "U1").is_none(),
-            "another author's messages must never enter review"
-        );
-        assert!(
-            parse_owned(
-                &json!({"user":"U1","ts":"1.000001","subtype":"bot_message"}),
-                &conversation,
-                "U1"
-            )
-            .is_none(),
-            "bot-type events must never enter review"
-        );
+        let conversation = Conversation { id: "C1".to_owned(), label: "general".to_owned(),
+            kind: ConversationKind::PublicChannel };
+        assert!(parse_owned(&json!({"user":"U2","ts":"1.000001"}), &conversation, "U1").is_none(),
+            "another author's messages must never enter review");
+        assert!(parse_owned(&json!({"user":"U1","ts":"1.000001","subtype":"bot_message"}), &conversation, "U1").is_none(),
+            "bot-type events must never enter review");
     }
 
     /// The domain preserves thread parents and exact Slack timestamps.
@@ -268,54 +290,56 @@ mod tests {
     fn discovery_round_trip_keeps_thread_identity() -> Result<(), Box<dyn std::error::Error>> {
         let conversation = parse_conversation(&json!({"id":"D1","is_im":true,"user":"U2"}))
             .ok_or("conversation fixture was rejected")?;
-        let item = parse_owned(
-            &json!({"user":"U1","ts":"123.000002","thread_ts":"123.000001", "text":"hello"}),
-            &conversation,
-            "U1",
-        )
-        .ok_or("message fixture was rejected")?;
-        assert_eq!(
-            item.parent.as_deref(),
-            Some("123.000001"),
-            "thread reply must retain parent timestamp"
-        );
-        assert_eq!(
-            item.domain("T1", "U1")?.key().timestamp().as_str(),
-            "123.000002",
-            "timestamp must be exact"
-        );
+        let item = parse_owned(&json!({"user":"U1","ts":"123.000002","thread_ts":"123.000001", "text":"hello"}),
+            &conversation, "U1").ok_or("message fixture was rejected")?;
+        assert_eq!(item.parent.as_deref(), Some("123.000001"), "thread reply must retain parent timestamp");
+        assert_eq!(item.domain("T1", "U1")?.key().timestamp().as_str(), "123.000002", "timestamp must be exact");
         Ok(())
+    }
+
+    /// A legacy scan is not allowed to claim full channel deletion coverage.
+    #[test]
+    fn schema_upgrade_resets_stale_coverage() -> Result<(), String> {
+        let mut data = WorkspaceData::new("T1".to_owned(), "U1".to_owned());
+        data.schema = 1;
+        data.scan_complete = true;
+        data.coverage.insert("C1".to_owned(), super::ScanStatus::Complete);
+        data.migrate_legacy()?;
+        assert!(!data.scan_complete);
+        assert!(!data.conversation_complete("C1"));
+        data.schema = 3;
+        assert!(data.migrate_legacy().is_err());
+        Ok(())
+    }
+
+    /// Thread-level selection requires a complete parent conversation and root.
+    #[test]
+    fn thread_coverage_rejects_incomplete_parent_or_reply_scan() {
+        let mut data = WorkspaceData::new("T1".to_owned(), "U1".to_owned());
+        data.threads.push(super::ThreadRecord {
+            channel: "C1".to_owned(), root: "1.000001".to_owned(),
+            reply_count: 3, status: super::ScanStatus::Complete,
+        });
+        assert!(!data.thread_complete("C1", "1.000001"));
+        data.coverage.insert("C1".to_owned(), super::ScanStatus::Partial);
+        assert!(!data.thread_complete("C1", "1.000001"));
+        data.coverage.insert("C1".to_owned(), super::ScanStatus::Complete);
+        assert!(data.thread_complete("C1", "1.000001"));
+        assert!(!data.thread_complete("C1", "1.000002"));
     }
 
     /// Corrupt and duplicated checkpoints are rejected before re-arming any job.
     #[test]
     fn saved_jobs_never_silently_replay_unknown_items() -> Result<(), Box<dyn std::error::Error>> {
         let mut data = WorkspaceData::new("T1".to_owned(), "U1".to_owned());
-        let message = OwnedMessage {
-            channel: "C1".to_owned(),
-            timestamp: "1.000001".to_owned(),
-            parent: None,
-            kind: ConversationKind::PublicChannel,
-            preview: "hello".to_owned(),
-            conversation_label: "general".to_owned(),
-        };
-        let job = super::SavedJob {
-            confirmed_count: 2,
-            entries: vec![
-                super::JobEntry {
-                    message: message.clone(),
-                    status: ItemState::Queued,
-                },
-                super::JobEntry {
-                    message,
-                    status: ItemState::Queued,
-                },
-            ],
-        };
-        assert!(
-            data.verified_queue(&job).is_err(),
-            "duplicate selected IDs must be rejected"
-        );
+        let message = OwnedMessage { channel:"C1".to_owned(), timestamp:"1.000001".to_owned(),
+            parent:None, kind:ConversationKind::PublicChannel, preview:"hello".to_owned(),
+            conversation_label:"general".to_owned() };
+        let job = super::SavedJob { confirmed_count: 2, entries: vec![
+            super::JobEntry {message:message.clone(), status:ItemState::Queued},
+            super::JobEntry {message, status:ItemState::Queued},
+        ] };
+        assert!(data.verified_queue(&job).is_err(), "duplicate selected IDs must be rejected");
         data.job = Some(job);
         Ok(())
     }

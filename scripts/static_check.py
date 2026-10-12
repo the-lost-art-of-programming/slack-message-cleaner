@@ -22,14 +22,7 @@ class PackagingChecks(unittest.TestCase):
 
     def test_no_handwritten_javascript_or_typescript(self):
         suffixes = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"}
-        generated_dirs = {"target", "dist", "pkg", "node_modules", ".git"}
-        unexpected = [
-            str(path.relative_to(ROOT))
-            for path in ROOT.rglob("*")
-            if path.is_file()
-            and path.suffix in suffixes
-            and not generated_dirs.intersection(path.relative_to(ROOT).parts)
-        ]
+        unexpected = [str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and p.suffix in suffixes]
         self.assertEqual(unexpected, [], "No JS/TS is authored in the source tree")
 
     def test_rust_workspace_and_dependency_manifests_parse(self):
@@ -47,8 +40,29 @@ class PackagingChecks(unittest.TestCase):
         self.assertIn("queue.start(&key)", runner)
         self.assertLess(runner.index("queue.start(&key)"), runner.index("let outcome = attempt"))
         self.assertIn("checkpoint(&data, state).await?;", runner)
-        self.assertRegex(runner, r'slack\s*\.\s*call\s*\(\s*"conversations\.replies"')
-        self.assertRegex(runner, r'slack\s*\.\s*call\s*\(\s*"chat\.delete"')
+        self.assertIn('slack.call("conversations.replies"', runner)
+        self.assertIn('slack.call("chat.delete"', runner)
+
+    def test_scope_complete_required_for_container_wide_selection(self):
+        ui = (ROOT / "crates/cleaner-ui/src/main.rs").read_text()
+        scan = (ROOT / "crates/cleaner-ui/src/scan.rs").read_text()
+        self.assertIn('current.conversation_complete(&channel)', ui)
+        self.assertIn('current.thread_complete(&channel, &root)', ui)
+        self.assertIn('current.scan_complete', ui)
+        self.assertIn('"conversations.replies"', scan)
+        self.assertIn('Slack returned a repeated message cursor', scan)
+        self.assertIn('Message pagination stopped without a cursor', scan)
+
+    def test_navigation_uses_slack_permalink_and_reuses_existing_tab(self):
+        main = (ROOT / "crates/cleaner-ui/src/main.rs").read_text()
+        browser = (ROOT / "crates/cleaner-ui/src/browser.rs").read_text()
+        links = (ROOT / "crates/cleaner-core/src/links.rs").read_text()
+        self.assertIn('chat.getPermalink', main)
+        self.assertIn('permalink_is_for', main)
+        self.assertIn('"query"', browser)
+        self.assertIn('"update"', browser)
+        self.assertIn('"create"', browser)
+        self.assertIn('host.ends_with(".slack.com")', links)
 
     def test_tokens_are_never_saved_to_local_storage(self):
         browser = (ROOT / "crates/cleaner-ui/src/browser.rs").read_text()

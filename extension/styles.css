@@ -13,3 +13,8 @@ button:disabled{opacity:.45;cursor:default}input[type=text],input[type=number],s
 .meta{font-size:11px;color:#596a79;margin-top:4px}.count{font-variant-numeric:tabular-nums}
 .status{padding:8px;border-radius:7px;background:#eef4f6}.warning{background:#fff2e4;border:1px solid #f5cd9b;padding:9px;border-radius:7px}
 .jobrow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-bottom:1px solid #edf0f4}
+
+/* Navigation remains usable in Firefox's narrow sidebar. */
+.container-list { max-height: 15rem; overflow-y: auto; margin: 0.75rem 0; }
+.container-row { padding: 0.35rem 0; border-bottom: 1px solid var(--line, #ddd); }
+.message-link { text-align: left; white-space: normal; word-break: break-word; }
