@@ -1,0 +1,29 @@
+name: Normalize Rust formatting
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  rustfmt:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: true
+      - name: Install pinned nightly formatter
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal --component rustfmt
+          rustup toolchain install nightly --profile minimal --component rustfmt
+      - name: Normalize Rust source and commit when changed
+        run: |
+          cargo +nightly fmt --all
+          git add crates/
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style: normalize Rust source with pinned nightly rustfmt'
+            git push origin HEAD:main
+          fi
