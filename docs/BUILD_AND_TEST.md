@@ -8,6 +8,21 @@ resolve DNS. The offline Python structural checks run; Rust compilation,
 Leptos/WASM generation, Firefox loading, and authenticated Slack behavior are
 **not** verified here. Do not load this as a proven working deletion utility.
 
+## Continuous integration
+
+On each push to `main` and every pull request, GitHub Actions verifies:
+native Rust compilation, strict Clippy and rustfmt, unit/integration tests,
+executable Rustdoc examples, offline extension invariants, and cargo-deny
+advisory/license/source policies. A separate job builds the Firefox WebAssembly
+bundle and attempts a non-destructive headless Firefox installation/UI smoke
+test. The source formatter normalizes the project using nightly rustfmt, and
+overlapping older CI runs are cancelled on the same branch.
+
+An approved, documented maintenance-only exception for transitive
+`paste` (RUSTSEC-2024-0436) is recorded in `deny.toml`. Vulnerability
+and license enforcement otherwise remains enabled. These automated tests
+do not prove authentication or deletion works in an actual Slack workspace.
+
 ## Local prerequisites
 
 1. Install Rust 1.96 with `rustup` and target `wasm32-unknown-unknown`.
