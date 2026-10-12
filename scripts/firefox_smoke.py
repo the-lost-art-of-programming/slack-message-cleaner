@@ -25,6 +25,7 @@ def main() -> int:
         from selenium import webdriver
         from selenium.webdriver.common.by import By
         from selenium.webdriver.firefox.options import Options
+        from selenium.webdriver.firefox.service import Service
         from selenium.webdriver.support.ui import WebDriverWait
     except ImportError:
         print("Install selenium and geckodriver to perform headless Firefox testing", file=sys.stderr)
@@ -35,15 +36,35 @@ def main() -> int:
         "extensions.webextensions.uuids",
         json.dumps({EXTENSION_ID: TEST_UUID}),
     )
-    with webdriver.Firefox(options=options) as driver:
+    # Firefox 153+ prohibits WebDriver navigating directly into privileged
+    # extension pages. Limit elevated access to the throwaway CI driver.
+    service = Service(service_args=["--allow-system-access"])
+    with webdriver.Firefox(options=options, service=service) as driver:
         installed = driver.install_addon(str(BUNDLE), temporary=True)
         if installed != EXTENSION_ID:
             raise AssertionError(f"Firefox did not install the expected extension: {installed}")
         print("PASS Firefox installed the extension in headless mode")
-        # A deterministic UUID avoids a race with prefs.js serialization.
-        # Browsing the page verifies the packaged Rust/WASM UI actually mounts.
-        driver.get(f"moz-extension://{TEST_UUID}/index.html")
-        heading = WebDriverWait(driver, 20).until(lambda browser: browser.find_element(By.CSS_SELECTOR, "h1"))
+        # Firefox 153+ refuses a content-context navigate to moz-extension://.
+        # Create the tab as the browser UI, then return to an ordinary content
+        # context to assert the extension's real Rust/WASM interface mounts.
+        before = set(driver.window_handles)
+        with driver.context(driver.CONTEXT_CHROME):
+            driver.execute_script(
+                """
+                gBrowser.selectedTab = gBrowser.addTab(arguments[0], {
+                    triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+                });
+                """,
+                f"moz-extension://{TEST_UUID}/index.html",
+            )
+        new_tab = WebDriverWait(driver, 15).until(
+            lambda browser: next(
+                (handle for handle in browser.window_handles if handle not in before),
+                None,
+            )
+        )
+        driver.switch_to.window(new_tab)
+        heading = WebDriverWait(driver, 30).until(lambda browser: browser.find_element(By.CSS_SELECTOR, "h1"))
         if heading.text != "Own Message Cleaner":
             raise AssertionError(f"Unexpected UI heading: {heading.text}")
         connect = driver.find_element(By.XPATH, "//button[contains(., 'Connect / Restore')]")
