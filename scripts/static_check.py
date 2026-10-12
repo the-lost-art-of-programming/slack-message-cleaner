@@ -2,6 +2,7 @@
 """Offline structural/security checks; not a substitute for Cargo/Firefox tests."""
 from pathlib import Path
 import json
+import re
 import tomllib
 import unittest
 
@@ -40,8 +41,8 @@ class PackagingChecks(unittest.TestCase):
         self.assertIn("queue.start(&key)", runner)
         self.assertLess(runner.index("queue.start(&key)"), runner.index("let outcome = attempt"))
         self.assertIn("checkpoint(&data, state).await?;", runner)
-        self.assertIn('slack.call("conversations.replies"', runner)
-        self.assertIn('slack.call("chat.delete"', runner)
+        self.assertRegex(runner, r'\.call\(\s*"conversations\.replies"')
+        self.assertRegex(runner, r'\.call\(\s*"chat\.delete"')
 
     def test_scope_complete_required_for_container_wide_selection(self):
         ui = (ROOT / "crates/cleaner-ui/src/main.rs").read_text()
