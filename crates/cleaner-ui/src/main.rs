@@ -478,7 +478,10 @@ fn App() -> impl IntoView {
                 <Show when=move || !conversation.get().is_empty()>
                     <h3>"Threads in this conversation"</h3>
                     <div class="container-list">
-                        <For each=move || data.get().threads.into_iter().filter(|item| item.channel == conversation.get()).collect::<Vec<_>>()
+                        <For each=move || {
+                            let chosen = conversation.get();
+                            data.get().threads.into_iter().filter(|item| item.channel == chosen).collect::<Vec<_>>()
+                        }
                             key=|item| format!("{}:{}", item.channel, item.root)
                             children=move |item| {
                                 let local_root = item.root.clone();
